@@ -14,10 +14,8 @@ The project is structured in the following way.
   - [index.html](/index.html) imports the bundled source script and has a single
     `<hacker-news>` component in its body, that is an NX component defined in the src folder.
     The bundled source is imported as an async script for faster loading.
-  - [server.js](/server.js) has a very light server logic. It tries to serve from the
-    static directory first, then serves the index.html file if no static asset is found.
-    It also uses the [nx-seo](https://github.com/RisingStack/nx-seo) Express middleware, that
-    prerenders the page for web crawlers.
+  - [404.html](/404.html) is a hackish script to make Single Page Apps work with
+    Github Pages hosting. For more information see [this repo](https://github.com/rafrex/spa-github-pages).
 
 ## Browser support
 
