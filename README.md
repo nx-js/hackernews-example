@@ -10,7 +10,7 @@ The project is structured in the following way.
   - The [src](/src) folder includes the API and the NX components of the app.
   - The source is bundled with [Webpack](https://webpack.github.io/). You can find the simple
     bundling  config in [src](/webpack.config.js).
-  - The [static](/src) folder includes static assets, like the bundled source code.
+  - [bundle.js](/bundle.js) is the source code and NX bundled together by Webpack.
   - [index.html](/index.html) imports the bundled source script and has a single
     `<hacker-news>` component in its body, that is an NX component defined in the src folder.
     The bundled source is imported as an async script for faster loading.
