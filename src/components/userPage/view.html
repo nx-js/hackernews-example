@@ -1,0 +1,8 @@
+<div @if="user">
+  <div enter-animation="fadeIn .6s .3s">
+    <p>user: ${user.id}</p>
+    <p>created: ${user.created}</p>
+    <p>karma: ${user.karma}</p>
+    <p>about: <dynamic-html $content="user.about"></dynamic-html></p>
+  </div>
+</div>

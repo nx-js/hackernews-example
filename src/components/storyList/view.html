@@ -1,0 +1,4 @@
+<div @repeat="ids" repeat-value="id">
+  <story-item $story-id="id" leave-animation="fadeOut .6s" move-animation=".6s"></story-item>
+</div>
+<a #click="page++" class="story-more">More</a>

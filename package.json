@@ -1,0 +1,28 @@
+{
+  "name": "hacker-news",
+  "version": "1.0.0",
+  "description": "NX implementation of Hacker News",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack",
+    "prestart": "webpack",
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@risingstack/nx-framework": "^1.0.0-alpha.2.3.1",
+    "@risingstack/nx-seo": "^1.0.3",
+    "events": "^1.1.1",
+    "express": "^4.14.0",
+    "firebase": "^2.4.2"
+  },
+  "devDependencies": {
+    "css-loader": "^0.25.0",
+    "less": "^2.7.1",
+    "less-loader": "^2.2.3",
+    "raw-loader": "^0.5.1",
+    "style-loader": "^0.13.1",
+    "webpack": "^1.13.1"
+  }
+}

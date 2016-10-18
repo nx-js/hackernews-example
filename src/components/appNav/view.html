@@ -1,0 +1,11 @@
+<nav>
+  <a iref="stories" $iref-params="{type: 'top'}"><b>Hacker News</b></a>
+  <a iref="stories" $iref-params="{type: 'new'}" @class="{active: type === 'new'}">new</a>
+  | <a iref="stories" $iref-params="{type: 'show'}" @class="{active: type === 'show'}">show</a>
+  | <a iref="stories" $iref-params="{type: 'ask'}" @class="{active: type === 'ask'}">ask</a>
+  | <a iref="stories" $iref-params="{type: 'job'}" @class="{active: type === 'job'}">jobs</a>
+  <span>Built with
+    <a href="http://nx-framework.com" target="_blank">NX</a> |
+    <a href="https://github.com/solkimicreb/hacker-news">Source</a>
+  </span>
+</nav>
