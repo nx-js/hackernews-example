@@ -17,16 +17,16 @@ these conventions for this project.
 
 This is what each of the components is responsible for.
 
-  - [hacker-news](/tree/master/src/components/hackerNews): The top level component.
+  - [hacker-news](/src/components/hackerNews): The top level component.
   Adds some global filters and renders the main view.
-  - [app-nav](/tree/master/src/components/hackerNews): Renders the navbar view.
-  - [app-router](/tree/master/src/components/hackerNews): A very basic router component.
+  - [app-nav](/src/components/appNav): Renders the navbar view.
+  - [app-router](/src/components/appRouter): A very basic router component.
   Not very interesting, for the 'router config' see the view.html of the hacker-news component instead.
-  - [dynamic-html](/tree/master/src/components/dynamicHTML): A component that allows
+  - [dynamic-html](/src/components/dynamicHTML): A component that allows
   the interpolation of any HTML into the view (not just text).
-  - [story-item](/tree/master/src/components/storyItem): Renders a single story item view.
-  - [story-list](/tree/master/src/components/storyList): Fetches and renders a list of stories.
-  - [user-page](/tree/master/src/components/userPage): Fetches and renders a user.
-  - [comment-item](/tree/master/src/components/commentItem): Renders a single comment.
-  - [story-page](/tree/master/src/components/storyPage): Fetches and renders a single story and
+  - [story-item](/src/components/storyItem): Renders a single story item view.
+  - [story-list](/src/components/storyList): Fetches and renders a list of stories.
+  - [user-page](/src/components/userPage): Fetches and renders a user.
+  - [comment-item](/src/components/commentItem): Renders a single comment.
+  - [story-page](/src/components/storyPage): Fetches and renders a single story and
   all of its comments.
