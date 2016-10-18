@@ -1,5 +1,7 @@
 # NX Hacker News clone
 
+[Live demo](https://nx-hacker-news.github.io)
+
 A Hacker News clone built with [NX](http://nx-framework.com).
 It features client-side routing, real-time updates and animations.
 
