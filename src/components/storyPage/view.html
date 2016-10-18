@@ -1,3 +1,5 @@
+<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->
+<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
 <div @if="story">
   <div enter-animation="fadeIn .6s .3s">
     <story-item $story></story-item>

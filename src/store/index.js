@@ -1,5 +1,6 @@
 'use strict'
 
+// use Firebase and EventListener for simple real-time updates
 const Firebase = require('firebase')
 const EventListener = require('events')
 
@@ -9,15 +10,18 @@ const cache = new Map()
 const idsByType = new Map()
 const ITEMS_PER_PAGE = 30
 
+// fire an update event when the page becomes visible
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     setTimeout(() => store.emit('stories-updated'), 100)
   }
 })
 
+// keep the story ids real-time updated, broadcast an event when they change
 for (let type of ['top', 'new', 'ask', 'show', 'job']) {
   api.child(`${type}stories`).on('value', snapshot => {
     idsByType.set(type, snapshot.val())
+    // do not fire events if the page is hidden
     if (!document.hidden) {
       store.emit('stories-updated')
     }

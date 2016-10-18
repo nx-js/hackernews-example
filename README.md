@@ -18,3 +18,10 @@ The project is structured in the following way.
     static directory first, then serves the index.html file if no static asset is found.
     It also uses the [nx-seo](https://github.com/RisingStack/nx-seo) Express middleware, that
     prerenders the page for web crawlers.
+
+## Browser support
+
+NX is a next generation framework, supported only by the latest browsers. It works in the
+latest Chrome, Firefox Opera and Edge versions, Safari 10 and iOS 10. It doesn't work in any
+version of IE yet. The reason is the heavy usage of unpolyfillabe ES6 Proxies, which
+makes the NX data binding and reactivity system really simple with no surprise edge cases.

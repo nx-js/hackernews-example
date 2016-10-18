@@ -46,8 +46,13 @@
 
 	'use strict'
 
+	// this exposes the global nx object, which is the entry point of the NX framework
 	__webpack_require__(1)
+
+	// this exposes a global store object, that can be used to access Hacker News data
 	__webpack_require__(52)
+
+	// this registers the NX components to be used in HTML by their name
 	__webpack_require__(55)
 
 
@@ -2963,6 +2968,7 @@
 
 	'use strict'
 
+	// use Firebase and EventListener for simple real-time updates
 	const Firebase = __webpack_require__(53)
 	const EventListener = __webpack_require__(54)
 
@@ -2972,15 +2978,18 @@
 	const idsByType = new Map()
 	const ITEMS_PER_PAGE = 30
 
+	// fire an update event when the page becomes visible
 	document.addEventListener('visibilitychange', () => {
 	  if (!document.hidden) {
 	    setTimeout(() => store.emit('stories-updated'), 100)
 	  }
 	})
 
+	// keep the story ids real-time updated, broadcast an event when they change
 	for (let type of ['top', 'new', 'ask', 'show', 'job']) {
 	  api.child(`${type}stories`).on('value', snapshot => {
 	    idsByType.set(type, snapshot.val())
+	    // do not fire events if the page is hidden
 	    if (!document.hidden) {
 	      store.emit('stories-updated')
 	    }
@@ -2992,7 +3001,6 @@
 	store.fetchItems = fetchItems
 	store.fetchItem = fetchItem
 	store.fetchUser = fetchUser
-	store.ITEMS_PER_PAGE = ITEMS_PER_PAGE
 	window.store = store
 
 	function fetch (child) {
@@ -3656,6 +3664,10 @@
 
 	const urlParser = document.createElement('a')
 
+	// create a Web Component that inherits functionality (middlewares) from nx.components.app
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// add filters to the component and its descendants by using the filter middleware on its content (useOnContent)
+	// register the component as 'hacker-news', from now on it can be used as <hacker-news></hacker-news>
 	nx.components.app()
 	  .use(nx.middlewares.render({
 	    template: __webpack_require__(57),
@@ -3663,18 +3675,15 @@
 	  }))
 	  .useOnContent(nx.middlewares.filter('host', hostFilter))
 	  .useOnContent(nx.middlewares.filter('timeAgo', timeAgoFilter))
-	  .useOnContent(nx.middlewares.filter('rank', rankFilter))
 	  .register('hacker-news')
 
+	// this is a custom filter, that can be used in the view as 'value | host'
 	function hostFilter (url) {
 	  urlParser.href = url
 	  return urlParser.host
 	}
 
-	function rankFilter (index, page) {
-	  return (page * store.ITEMS_PER_PAGE) + index + 1
-	}
-
+	// this is a custom filter, that can be used in the view as 'value | timeAgo'
 	function timeAgoFilter (timestamp) {
 	  const diffInSeconds = Math.round(Date.now() / 1000) - timestamp
 	  if (diffInSeconds < 3600) {
@@ -3691,7 +3700,7 @@
 /* 57 */
 /***/ function(module, exports) {
 
-	module.exports = "<nav is=\"app-nav\"></nav>\n<app-router>\n  <story-list route=\"stories\" default-route leave-animation=\"fadeOut .6s\"></story-list>\n  <user-page route=\"user\" leave-animation=\"fadeOut .6s\"></user-page>\n  <story-page route=\"story\" leave-animation=\"fadeOut .6s\"></story-page>\n</app-router>\n"
+	module.exports = "<!-- adds routing logic with the router comp and route attributes -->\n<!-- the child which has a route attribute matching with the URL path is displayed -->\n<!-- adds leave animations to the router views -->\n<nav is=\"app-nav\"></nav>\n<app-router>\n  <story-list route=\"stories\" default-route leave-animation=\"fadeOut .6s\"></story-list>\n  <user-page route=\"user\" leave-animation=\"fadeOut .6s\"></user-page>\n  <story-page route=\"story\" leave-animation=\"fadeOut .6s\"></story-page>\n</app-router>\n"
 
 /***/ },
 /* 58 */
@@ -3705,6 +3714,8 @@
 
 	'use strict'
 
+	// create a Web Component that inherits routing functionality (middlewares) from nx.components.router
+	// register the component as 'app-router', from now on it can be used as <app-router></app-router>
 	nx.components.router()
 	  .register('app-router')
 
@@ -3715,6 +3726,10 @@
 
 	'use strict'
 
+	// create a Web Component, extending the native 'nav' element
+	// add a params middleware, that keeps the 'type' parameter in sync with the URL and history
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// register the component as 'app-nav', from now on it can be used as <app-nav></app-nav>
 	nx.component({element: 'nav'})
 	  .use(nx.middlewares.params({
 	    type: {type: 'string', default: 'top'}
@@ -3730,7 +3745,7 @@
 /* 61 */
 /***/ function(module, exports) {
 
-	module.exports = "<nav>\n  <a iref=\"stories\" $iref-params=\"{type: 'top'}\"><b>Hacker News</b></a>\n  <a iref=\"stories\" $iref-params=\"{type: 'new'}\" @class=\"{active: type === 'new'}\">new</a>\n  | <a iref=\"stories\" $iref-params=\"{type: 'show'}\" @class=\"{active: type === 'show'}\">show</a>\n  | <a iref=\"stories\" $iref-params=\"{type: 'ask'}\" @class=\"{active: type === 'ask'}\">ask</a>\n  | <a iref=\"stories\" $iref-params=\"{type: 'job'}\" @class=\"{active: type === 'job'}\">jobs</a>\n  <span>Built with <a href=\"http://nx-framework.com\" target=\"_blank\">NX</a> | <a href=\"\">Source</a></span>\n</nav>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- adds client side routing navigation with the iref and iref-params attributes -->\n<nav>\n  <a iref=\"stories\" $iref-params=\"{type: 'top'}\"><b>Hacker News</b></a>\n  <a iref=\"stories\" $iref-params=\"{type: 'new'}\" @class=\"{active: type === 'new'}\">new</a>\n  | <a iref=\"stories\" $iref-params=\"{type: 'show'}\" @class=\"{active: type === 'show'}\">show</a>\n  | <a iref=\"stories\" $iref-params=\"{type: 'ask'}\" @class=\"{active: type === 'ask'}\">ask</a>\n  | <a iref=\"stories\" $iref-params=\"{type: 'job'}\" @class=\"{active: type === 'job'}\">jobs</a>\n  <span>Built with\n    <a href=\"http://nx-framework.com\" target=\"_blank\">NX</a> |\n    <a href=\"https://github.com/solkimicreb/hacker-news\">Source</a>\n  </span>\n</nav>\n"
 
 /***/ },
 /* 62 */
@@ -3744,25 +3759,31 @@
 
 	'use strict'
 
+	// create a Web Component
+	// add a params middleware, that keeps the 'type' and 'page' parameters in sync with the URL and history
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// add a custom middleware
+	// register the component as 'story-list', from now on it can be used as <story-listy></story-list>
 	nx.component()
 	  .use(nx.middlewares.params({
 	    type: {type: 'string', readOnly: true, default: 'top'},
 	    page: {type: 'number', history: true, default: 0}
 	  }))
-	  .use(setup)
 	  .use(nx.middlewares.render({
 	    template: __webpack_require__(64),
 	    style: __webpack_require__(65)
 	  }))
+	  .use(setup)
 	  .register('story-list')
 
+	// this is a custom middleware
+	// it loads stories when the store broadcasts an update event or when the 'type' or 'page' parameters change
 	function setup (elem, state) {
 	  store.on('stories-updated', loadStories)
 	  elem.$cleanup(() => store.removeListener('stories-updated', loadStories))
 	  elem.$observe(loadStories)
 
 	  function loadStories () {
-	    console.log('loading stories')
 	    store.fetchIdsByType(state.type, state.page)
 	      .then(ids => state.ids = ids)
 	  }
@@ -3773,7 +3794,7 @@
 /* 64 */
 /***/ function(module, exports) {
 
-	module.exports = "<div @repeat=\"ids\" repeat-value=\"id\">\n  <story-item $story-id=\"id\" leave-animation=\"fadeOut .6s\" move-animation=\".6s\"></story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"ids\" repeat-value=\"id\">\n  <story-item $story-id=\"id\" leave-animation=\"fadeOut .6s\" move-animation=\".6s\"></story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
 
 /***/ },
 /* 65 */
@@ -3787,6 +3808,10 @@
 
 	'use strict'
 
+	// create a Web Component
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// add a custom middleware
+	// register the component as 'story-item', from now on it can be used as <story-item></story-item>
 	nx.component()
 	  .use(nx.middlewares.render({
 	    template: __webpack_require__(67),
@@ -3795,6 +3820,8 @@
 	  .use(setup)
 	  .register('story-item')
 
+	// this is a custom middleware, that registers the story and story-id attributes on the component
+	// these attributes can fetch/inject a story into the component
 	function setup (elem, state) {
 	  elem.$attribute('story', story => state.story = story)
 	  elem.$attribute('story-id', id => {
@@ -3808,7 +3835,7 @@
 /* 67 */
 /***/ function(module, exports) {
 
-	module.exports = "<div @if=\"story && !story.deleted && !story.dead && story.title\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div $if=\"story.url\">\n      <a $href=\"story.url\">${story.title}</a>\n      <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n    </div>\n    <div $if=\"!story.url\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n    </div>\n\n    <div $if=\"story.type === 'job'\" class=\"subtext light\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n    </div>\n    <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n      ${story.score | unit 'point'} by\n      <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n    </div>\n  </div>\n</div>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story && !story.deleted && !story.dead && story.title\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div $if=\"story.url\">\n      <a $href=\"story.url\">${story.title}</a>\n      <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n    </div>\n    <div $if=\"!story.url\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n    </div>\n\n    <div $if=\"story.type === 'job'\" class=\"subtext light\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n    </div>\n    <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n      ${story.score | unit 'point'} by\n      <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n    </div>\n  </div>\n</div>\n"
 
 /***/ },
 /* 68 */
@@ -3822,17 +3849,23 @@
 
 	'use strict'
 
+	// create a Web Component
+	// add a params middleware, that keeps the 'id' parameter in sync with the URL and history
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// add a custom middleware
+	// register the component as 'story-page', from now on it can be used as <story-page></story-page>
 	nx.component()
 	  .use(nx.middlewares.params({
 	    id: {type: 'number', readOnly: true, required: true}
 	  }))
-	  .use(setup)
 	  .use(nx.middlewares.render({
 	    template: __webpack_require__(70),
 	    style: __webpack_require__(71)
 	  }))
+	  .use(setup)
 	  .register('story-page')
 
+	// this is a custom middleware, that fetches a story by its id
 	function setup (elem, state) {
 	  store.fetchItem(state.id)
 	    .then(story => state.story = story)
@@ -3843,7 +3876,7 @@
 /* 70 */
 /***/ function(module, exports) {
 
-	module.exports = "<div @if=\"story\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <story-item $story></story-item>\n    <dynamic-html $content=\"story.text\" class=\"story-text\"></dynamic-html>\n    <lu $repeat=\"story.kids\" repeat-value=\"commentId\">\n      <li is=\"comment-item\" $comment-id=\"commentId\"></li>\n    </lu>\n  </div>\n</div>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <story-item $story></story-item>\n    <dynamic-html $content=\"story.text\" class=\"story-text\"></dynamic-html>\n    <lu $repeat=\"story.kids\" repeat-value=\"commentId\">\n      <li is=\"comment-item\" $comment-id=\"commentId\"></li>\n    </lu>\n  </div>\n</div>\n"
 
 /***/ },
 /* 71 */
@@ -3857,21 +3890,26 @@
 
 	'use strict'
 
+	// create a Web Component
+	// add a params middleware, that keeps the 'id' parameter in sync with the URL and history
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// add a custom middleware
+	// register the component as 'user-page', from now on it can be used as <user-page></user-page>
 	nx.component()
 	  .use(nx.middlewares.params({
 	    id: {type: 'string', readOnly: true, required: true}
 	  }))
-	  .use(setup)
 	  .use(nx.middlewares.render({
 	    template: __webpack_require__(73),
 	    style: __webpack_require__(74)
 	  }))
+	  .use(setup)
 	  .register('user-page')
 
-	function setup (elem, state, next) {
+	// this is a custom middleware, that fetches a user by its id
+	function setup (elem, state) {
 	  store.fetchUser(state.id)
 	    .then(user => state.user = user)
-	    .then(next)
 	}
 
 
@@ -3879,7 +3917,7 @@
 /* 73 */
 /***/ function(module, exports) {
 
-	module.exports = "<div @if=\"user\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <p>user: ${user.id}</p>\n    <p>created: ${user.created}</p>\n    <p>karma: ${user.karma}</p>\n    <p>about: <dynamic-html $content=\"user.about\"></dynamic-html></p>\n  </div>\n</div>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"user\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <p>user: ${user.id}</p>\n    <p>created: ${user.created}</p>\n    <p>karma: ${user.karma}</p>\n    <p>about: <dynamic-html $content=\"user.about\"></dynamic-html></p>\n  </div>\n</div>\n"
 
 /***/ },
 /* 74 */
@@ -3893,15 +3931,21 @@
 
 	'use strict'
 
+	// create a Web Component, extending the native 'li' element
+	// add a render middleware, that renders the content from view.html and style.less into the component
+	// add a custom middleware
+	// register the component as 'comment-item', from now on it can be used as <comment-item></comment-item>
 	nx.component({element: 'li'})
-	  .use(setup)
 	  .use(nx.middlewares.render({
 	    template: __webpack_require__(76),
 	    style: __webpack_require__(77)
 	  }))
+	  .use(setup)
 	  .register('comment-item')
 
-	function setup (elem, state, next) {
+	// this is a custom middleware
+	// it registers a comment-id attribute for the component, that fetches a comment by id
+	function setup (elem, state) {
 	  elem.$attribute('comment-id', id => {
 	    store.fetchItem(id)
 	      .then(comment => state.comment = comment)
@@ -3913,7 +3957,7 @@
 /* 76 */
 /***/ function(module, exports) {
 
-	module.exports = "<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div class=\"comment-header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">${hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div $hidden>\n      <dynamic-html $content=\"comment.text\" class=\"comment-body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\" move-animation></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div class=\"comment-header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"comment-body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
 
 /***/ },
 /* 77 */
@@ -3927,13 +3971,17 @@
 
 	'use strict'
 
+	// create a Web Component
+	// add a custom middleware
+	// register the component as 'dynamic-html', from now on it can be used as <dynamic-html></dynamic-html>
 	nx.component()
 	  .use(setup)
 	  .register('dynamic-html')
 
-	function setup (elem, state, next) {
+	// this is a custom middleware
+	// it registers an attribute named 'content' on the component, which sets its innerHTML
+	function setup (elem, state) {
 	  elem.$attribute('content', content => elem.innerHTML = content || '')
-	  return next()
 	}
 
 
