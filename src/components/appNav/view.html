@@ -1,14 +1,12 @@
 <!-- inline code is executed in the context of the component state (which is injected into middlewares) -->
 <!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
 <!-- adds client side routing navigation with the iref and iref-params attributes -->
-<nav>
-  <a iref="stories" $iref-params="{type: 'top'}"><b>Hacker News</b></a>
-  <a iref="stories" $iref-params="{type: 'new'}" @class="{active: type === 'new'}">new</a>
-  | <a iref="stories" $iref-params="{type: 'show'}" @class="{active: type === 'show'}">show</a>
-  | <a iref="stories" $iref-params="{type: 'ask'}" @class="{active: type === 'ask'}">ask</a>
-  | <a iref="stories" $iref-params="{type: 'job'}" @class="{active: type === 'job'}">jobs</a>
-  <span>Built with
-    <a href="http://nx-framework.com" target="_blank">NX</a> |
-    <a href="https://github.com/nx-hacker-news/nx-hacker-news.github.io">Source</a>
-  </span>
-</nav>
+<a iref="stories" $iref-params="{type: 'top'}"><b>Hacker News</b></a>
+<a iref="stories" $iref-params="{type: 'new'}" @class="{active: type === 'new'}">new</a>
+| <a iref="stories" $iref-params="{type: 'show'}" @class="{active: type === 'show'}">show</a>
+| <a iref="stories" $iref-params="{type: 'ask'}" @class="{active: type === 'ask'}">ask</a>
+| <a iref="stories" $iref-params="{type: 'job'}" @class="{active: type === 'job'}">jobs</a>
+<span>Built with
+  <a href="http://nx-framework.com" target="_blank">NX</a> |
+  <a href="https://github.com/nx-hacker-news/nx-hacker-news.github.io">Source</a>
+</span>
