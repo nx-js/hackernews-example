@@ -1,23 +1,21 @@
 <!-- inline code is executed in the context of the component state (which is injected into middlewares) -->
 <!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
-<div @if="story && !story.deleted && !story.dead && story.title">
-  <div enter-animation="fadeIn .6s .3s">
-    <div $if="story.url">
-      <a $href="story.url">${story.title}</a>
-      <small class="light">(<a $href="story.url">${story.url | host}</a>)</small>
-    </div>
-    <div $if="!story.url">
-      <a iref="../story" $iref-params="{id: story.id}">${story.title}</a>
-    </div>
+<div $if="story && !story.deleted && !story.dead && story.title">
+  <div $if="story.url">
+    <a $href="story.url">${story.title}</a>
+    <small class="light">(<a $href="story.url">${story.url | host}</a>)</small>
+  </div>
+  <div $if="!story.url">
+    <a iref="../story" $iref-params="{id: story.id}">${story.title}</a>
+  </div>
 
-    <div $if="story.type === 'job'" class="subtext light">
-      <a iref="../story" $iref-params="{id: story.id}">${story.time | timeAgo} ago</a>
-    </div>
-    <div $if="story.type !== 'job'" class="subtext light">
-      ${story.score | unit 'point'} by
-      <a iref="../user" $iref-params="{id: story.by}">${story.by}</a>
-      <a iref="../story" $iref-params="{id: story.id}">${story.time | timeAgo} ago</a> |
-      <a iref="../story" $iref-params="{id: story.id}">${story.descendants | unit 'comment'}</a>
-    </div>
+  <div $if="story.type === 'job'" class="subtext light">
+    <a iref="../story" $iref-params="{id: story.id}">${story.time | timeAgo} ago</a>
+  </div>
+  <div $if="story.type !== 'job'" class="subtext light">
+    ${story.score | unit 'point'} by
+    <a iref="../user" $iref-params="{id: story.by}">${story.by}</a>
+    <a iref="../story" $iref-params="{id: story.id}">${story.time | timeAgo} ago</a> |
+    <a iref="../story" $iref-params="{id: story.id}">${story.descendants | unit 'comment'}</a>
   </div>
 </div>

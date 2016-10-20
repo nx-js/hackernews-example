@@ -1,7 +1,11 @@
 <!-- inline code is executed in the context of the component state (which is injected into middlewares) -->
 <!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
 <!-- '#' prefix means event handling code -->
-<div @repeat="ids" repeat-value="id">
-  <story-item $story-id="id" move-animation=".6s .3s" leave-animation="fadeOut .6s"></story-item>
+<div @repeat="stories" repeat-value="story" repeat-key="id">
+  <story-item $story="story"
+    enter-animation="fadeIn .6s .3s"
+    move-animation=".6s .3s"
+    leave-animation="fadeOut .6s">
+  </story-item>
 </div>
 <a #click="page++" class="story-more">More</a>

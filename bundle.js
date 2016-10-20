@@ -3794,7 +3794,7 @@
 /* 63 */
 /***/ function(module, exports) {
 
-	module.exports = "nav[is=\"app-nav\"] {\n  background-color: #ff6600;\n  padding: 4px;\n}\nnav[is=\"app-nav\"] a.active {\n  color: white;\n}\nnav[is=\"app-nav\"] b {\n  padding: 0 4px;\n}\nnav[is=\"app-nav\"] span {\n  color: white;\n  float: right;\n  font-size: 9pt;\n}\nnav[is=\"app-nav\"] span a:hover {\n  text-decoration: underline;\n}\n"
+	module.exports = "nav[is=\"app-nav\"] {\n  background-color: #ff6600;\n  padding: 4px;\n  overflow: hidden;\n}\nnav[is=\"app-nav\"] a.active {\n  color: white;\n}\nnav[is=\"app-nav\"] b {\n  padding: 0 4px;\n}\nnav[is=\"app-nav\"] span {\n  color: white;\n  display: inline-block;\n  float: right;\n  font-size: 9pt;\n}\nnav[is=\"app-nav\"] span a:hover {\n  text-decoration: underline;\n}\n"
 
 /***/ },
 /* 64 */
@@ -3827,8 +3827,8 @@
 	  elem.$observe(loadStories)
 
 	  function loadStories () {
-	    store.fetchIdsByType(state.type, state.page)
-	      .then(ids => state.ids = ids)
+	    store.fetchItemsByType(state.type, state.page)
+	      .then(items => state.stories = items)
 	  }
 	}
 
@@ -3837,7 +3837,7 @@
 /* 65 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"ids\" repeat-value=\"id\">\n  <story-item $story-id=\"id\" move-animation=\".6s .3s\" leave-animation=\"fadeOut .6s\"></story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"stories\" repeat-value=\"story\" repeat-key=\"id\">\n  <story-item $story=\"story\"\n    enter-animation=\"fadeIn .6s .3s\"\n    move-animation=\".6s .3s\"\n    leave-animation=\"fadeOut .6s\">\n  </story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
 
 /***/ },
 /* 66 */
@@ -3863,14 +3863,10 @@
 	  .use(setup)
 	  .register('story-item')
 
-	// this is a custom middleware, that registers the story and story-id attributes on the component
-	// these attributes can fetch/inject a story into the component
+	// this is a custom middleware, that registers the story attribute on the component
+	// the attribute injects a story into the component state
 	function setup (elem, state) {
 	  elem.$attribute('story', story => state.story = story)
-	  elem.$attribute('story-id', id => {
-	    store.fetchItem(id)
-	      .then(story => state.story = story)
-	  })
 	}
 
 
@@ -3878,7 +3874,7 @@
 /* 68 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story && !story.deleted && !story.dead && story.title\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div $if=\"story.url\">\n      <a $href=\"story.url\">${story.title}</a>\n      <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n    </div>\n    <div $if=\"!story.url\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n    </div>\n\n    <div $if=\"story.type === 'job'\" class=\"subtext light\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n    </div>\n    <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n      ${story.score | unit 'point'} by\n      <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n    </div>\n  </div>\n</div>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div $if=\"story && !story.deleted && !story.dead && story.title\">\n  <div $if=\"story.url\">\n    <a $href=\"story.url\">${story.title}</a>\n    <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n  </div>\n  <div $if=\"!story.url\">\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n  </div>\n\n  <div $if=\"story.type === 'job'\" class=\"subtext light\">\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n  </div>\n  <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n    ${story.score | unit 'point'} by\n    <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n  </div>\n</div>\n"
 
 /***/ },
 /* 69 */
@@ -3986,21 +3982,21 @@
 	  .use(setup)
 	  .register('comment-item')
 
-	// this is a custom middleware
-	// it registers a comment-id attribute for the component, that fetches a comment by id
-	function setup (elem, state) {
-	  elem.$attribute('comment-id', id => {
-	    store.fetchItem(id)
-	      .then(comment => state.comment = comment)
-	  })
-	}
+	  // this is a custom middleware
+	  // it registers a comment-id attribute for the component, that fetches a comment by id
+	  function setup (elem, state) {
+	    elem.$attribute('comment-id', id => {
+	      store.fetchItem(id)
+	        .then(comment => state.comment = comment)
+	    })
+	  }
 
 
 /***/ },
 /* 77 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div class=\"comment-header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"comment-body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
+	module.exports = "\n<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s\">\n    <div class=\"comment-header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"comment-body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
 
 /***/ },
 /* 78 */

@@ -25,7 +25,7 @@ function setup (elem, state) {
   elem.$observe(loadStories)
 
   function loadStories () {
-    store.fetchIdsByType(state.type, state.page)
-      .then(ids => state.ids = ids)
+    store.fetchItemsByType(state.type, state.page)
+      .then(items => state.stories = items)
   }
 }

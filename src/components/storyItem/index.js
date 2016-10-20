@@ -12,12 +12,8 @@ nx.component()
   .use(setup)
   .register('story-item')
 
-// this is a custom middleware, that registers the story and story-id attributes on the component
-// these attributes can fetch/inject a story into the component
+// this is a custom middleware, that registers the story attribute on the component
+// the attribute injects a story into the component state
 function setup (elem, state) {
   elem.$attribute('story', story => state.story = story)
-  elem.$attribute('story-id', id => {
-    store.fetchItem(id)
-      .then(story => state.story = story)
-  })
 }
