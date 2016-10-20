@@ -2,6 +2,6 @@
 <!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
 <!-- '#' prefix means event handling code -->
 <div @repeat="ids" repeat-value="id">
-  <story-item $story-id="id" leave-animation="fadeOut .6s" move-animation=".6s"></story-item>
+  <story-item $story-id="id" move-animation=".6s .3s" leave-animation="fadeOut .6s"></story-item>
 </div>
 <a #click="page++" class="story-more">More</a>

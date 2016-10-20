@@ -50,10 +50,10 @@
 	__webpack_require__(1)
 
 	// this exposes a global store object, that can be used to access Hacker News data
-	__webpack_require__(52)
+	__webpack_require__(53)
 
 	// this registers the NX components to be used in HTML by their name
-	__webpack_require__(55)
+	__webpack_require__(56)
 
 
 /***/ },
@@ -68,12 +68,12 @@
 	const nx = {
 	  component: core.component,
 	  symbols: core.symbols,
-	  middlewares: __webpack_require__(13),
-	  filters: __webpack_require__(32),
-	  limiters: __webpack_require__(42),
-	  components: __webpack_require__(49),
+	  middlewares: __webpack_require__(14),
+	  filters: __webpack_require__(33),
+	  limiters: __webpack_require__(43),
+	  components: __webpack_require__(50),
 	  observer: __webpack_require__(7),
-	  compiler: __webpack_require__(16)
+	  compiler: __webpack_require__(17)
 	}
 
 	if (module && module.exports) {
@@ -124,10 +124,24 @@
 	  const observer = new MutationObserver(onMutations)
 	  observer.observe(document, {childList: true, subtree: true})
 
+	  // neha jo, neha nem -> de mindig ugy tunik hogy render utan fut le!!
+	  setInterval(emptyQueue, 0)
+	  function emptyQueue () {
+	    const mutations = observer.takeRecords()
+	    if (mutations.length) {
+	      console.log('emptying queue')
+	      onMutations(mutations)
+	    }
+	  }
+
 	  function onMutations (mutations) {
 	    for (let mutation of mutations) {
 	      Array.prototype.forEach.call(mutation.addedNodes, onNodeAdded)
 	      Array.prototype.forEach.call(mutation.removedNodes, onNodeRemoved)
+	    }
+	    mutations = observer.takeRecords()
+	    if (mutations.length) {
+	      onMutations(mutations)
 	    }
 	  }
 
@@ -188,7 +202,7 @@
 
 	module.exports = {
 	  component: __webpack_require__(6),
-	  symbols: __webpack_require__(11)
+	  symbols: __webpack_require__(12)
 	}
 
 
@@ -199,10 +213,10 @@
 	'use strict'
 
 	const observer = __webpack_require__(7)
-	const validateConfig = __webpack_require__(8)
-	const onNodeAdded = __webpack_require__(9)
-	const onNodeRemoved = __webpack_require__(12)
-	const symbols = __webpack_require__(11)
+	const validateConfig = __webpack_require__(9)
+	const onNodeAdded = __webpack_require__(10)
+	const onNodeRemoved = __webpack_require__(13)
+	const symbols = __webpack_require__(12)
 
 	const secret = {
 	  config: Symbol('component config'),
@@ -246,34 +260,36 @@
 	}
 
 	function attachedCallback () {
-	  if (typeof this[secret.config].state === 'object') {
-	    this[symbols.state] = this[secret.config].state
-	  } else if (this[secret.config].state === true) {
-	    this[symbols.state] = observer.observable()
-	  }
-	  if (this[secret.config].state === 'inherit') {
-	    this[symbols.inheritState] = true
-	  }
+	  if (!this[symbols.registered]) {
+	    if (typeof this[secret.config].state === 'object') {
+	      this[symbols.state] = this[secret.config].state
+	    } else if (this[secret.config].state === true) {
+	      this[symbols.state] = observer.observable()
+	    }
+	    if (this[secret.config].state === 'inherit') {
+	      this[symbols.inheritState] = true
+	    }
 
-	  this[symbols.isolate] = this[secret.config].isolate
-	  this[symbols.contentMiddlewares] = this[secret.config].contentMiddlewares.slice()
-	  this[symbols.middlewares] = this[secret.config].middlewares.slice()
-	  this[symbols.root] = this[secret.config].root
-	  this[symbols.registered] = true
+	    this[symbols.isolate] = this[secret.config].isolate
+	    this[symbols.contentMiddlewares] = this[secret.config].contentMiddlewares.slice()
+	    this[symbols.middlewares] = this[secret.config].middlewares.slice()
+	    this[symbols.root] = this[secret.config].root
+	    this[symbols.registered] = true
 
-	  if (this[symbols.root]) {
-	    this[secret.contentWatcher] = new MutationObserver(onMutations)
-	    this[secret.contentWatcher].observe(this, contentWatcherConfig)
+	    if (this[symbols.root]) {
+	      this[secret.contentWatcher] = new MutationObserver(onMutations)
+	      this[secret.contentWatcher].observe(this, contentWatcherConfig)
+	    }
+	    // it might be synchronous -> doesn't belong here -> should add it to the queue
+	    onNodeAdded(this)
 	  }
-	  // it might be synchronous -> doesn't belong here -> should add it to the queue
-	  onNodeAdded(this)
 	}
 
 	function detachedCallback () {
 	  if (this[secret.contentWatcher]) {
 	    this[secret.contentWatcher].disconnect()
-	    onNodeRemoved(this)
 	  }
+	  onNodeRemoved(this)
 	}
 
 	function onMutations (mutations, contentWatcher) {
@@ -281,7 +297,6 @@
 	    Array.prototype.forEach.call(mutation.removedNodes, onNodeRemoved)
 	    Array.prototype.forEach.call(mutation.addedNodes, onNodeAdded)
 	  }
-
 	  mutations = contentWatcher.takeRecords()
 	  if (mutations.length) {
 	    onMutations(mutations, contentWatcher)
@@ -291,10 +306,11 @@
 
 /***/ },
 /* 7 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
+	const nextTick = __webpack_require__(8)
 	const proxy = Symbol('proxy')
 	const unobserverSet = Symbol('unobserverSet')
 	const observing = Symbol('observing')
@@ -404,7 +420,7 @@
 
 	function queueObserver (observer) {
 	  if (observerSet.size === 0) {
-	    Promise.resolve().then(runObservers)
+	    nextTick(runObservers)
 	  }
 	  observerSet.add(observer)
 	}
@@ -435,6 +451,43 @@
 
 /***/ },
 /* 8 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	let mutateWithTask
+	let currTask
+
+	if (typeof MutationObserver !== 'undefined') {
+	  let counter = 0
+	  const observer = new MutationObserver(onMutation)
+	  const textNode = document.createTextNode(String(counter))
+	  observer.observe(textNode, {characterData: true})
+
+	  function onMutation () {
+	    if (currTask) {
+	      currTask()
+	    }
+	  }
+
+	  mutateWithTask = function mutateWithTask () {
+	    counter = (counter + 1) % 2
+	    textNode.data = String(counter)
+	  }
+	}
+
+	module.exports = function nextTick (task) {
+	  currTask = task
+	  if (mutateWithTask) {
+	    mutateWithTask()
+	  } else {
+	    Promise.resolve().then(task)
+	  }
+	}
+
+
+/***/ },
+/* 9 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -497,13 +550,13 @@
 
 
 /***/ },
-/* 9 */
+/* 10 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const setupNode = __webpack_require__(10)
-	const symbols = __webpack_require__(11)
+	const setupNode = __webpack_require__(11)
+	const symbols = __webpack_require__(12)
 
 	module.exports = function onNodeAdded (node) {
 	  const context = getContext(node)
@@ -606,13 +659,13 @@
 
 
 /***/ },
-/* 10 */
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	const observer = __webpack_require__(7)
-	const symbols = __webpack_require__(11)
+	const symbols = __webpack_require__(12)
 
 	module.exports = function setupNode (node) {
 	  node[symbols.cleanupFunctions] = []
@@ -687,7 +740,7 @@
 
 
 /***/ },
-/* 11 */
+/* 12 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -712,12 +765,12 @@
 
 
 /***/ },
-/* 12 */
+/* 13 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const symbols = __webpack_require__(11)
+	const symbols = __webpack_require__(12)
 
 	module.exports = function onNodeRemoved (node) {
 	  if (!shouldProcess(node)) return
@@ -740,34 +793,34 @@
 
 
 /***/ },
-/* 13 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  attributes: __webpack_require__(14),
-	  code: __webpack_require__(15),
-	  expression: __webpack_require__(17),
-	  filter: __webpack_require__(18),
-	  limiter: __webpack_require__(19),
-	  events: __webpack_require__(20),
-	  interpolate: __webpack_require__(21),
-	  render: __webpack_require__(22),
-	  content: __webpack_require__(23),
-	  flow: __webpack_require__(24),
-	  bindable: __webpack_require__(25),
-	  bind: __webpack_require__(26),
-	  style: __webpack_require__(27),
-	  animate: __webpack_require__(28),
-	  router: __webpack_require__(29),
-	  params: __webpack_require__(30),
-	  ref: __webpack_require__(31)
+	  attributes: __webpack_require__(15),
+	  code: __webpack_require__(16),
+	  expression: __webpack_require__(18),
+	  filter: __webpack_require__(19),
+	  limiter: __webpack_require__(20),
+	  events: __webpack_require__(21),
+	  interpolate: __webpack_require__(22),
+	  render: __webpack_require__(23),
+	  content: __webpack_require__(24),
+	  flow: __webpack_require__(25),
+	  bindable: __webpack_require__(26),
+	  bind: __webpack_require__(27),
+	  style: __webpack_require__(28),
+	  animate: __webpack_require__(29),
+	  router: __webpack_require__(30),
+	  params: __webpack_require__(31),
+	  ref: __webpack_require__(32)
 	}
 
 
 /***/ },
-/* 14 */
+/* 15 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -867,13 +920,13 @@
 
 
 /***/ },
-/* 15 */
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(16)
-	const exposed = __webpack_require__(11)
+	const compiler = __webpack_require__(17)
+	const exposed = __webpack_require__(12)
 
 	const limiterRegex = /(?:[^\&]|\&\&)+/g
 	const argsRegex = /\S+/g
@@ -954,7 +1007,7 @@
 
 
 /***/ },
-/* 16 */
+/* 17 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1005,13 +1058,13 @@
 
 
 /***/ },
-/* 17 */
+/* 18 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(16)
-	const exposed = __webpack_require__(11)
+	const compiler = __webpack_require__(17)
+	const exposed = __webpack_require__(12)
 
 	const filterRegex = /(?:[^\|]|\|\|)+/g
 	const argsRegex = /\S+/g
@@ -1067,12 +1120,12 @@
 
 
 /***/ },
-/* 18 */
+/* 19 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 
 	module.exports = function filterFactory (name, handler) {
 	  if (typeof name !== 'string') {
@@ -1094,12 +1147,12 @@
 
 
 /***/ },
-/* 19 */
+/* 20 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 
 	module.exports = function limiterFactory (name, handler) {
 	  if (typeof name !== 'string') {
@@ -1121,12 +1174,12 @@
 
 
 /***/ },
-/* 20 */
+/* 21 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(16)
+	const compiler = __webpack_require__(17)
 
 	const secret = {
 	  handlers: Symbol('event handlers')
@@ -1172,7 +1225,7 @@
 
 
 /***/ },
-/* 21 */
+/* 22 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1253,12 +1306,12 @@
 
 
 /***/ },
-/* 22 */
+/* 23 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 
 	module.exports = function render (config) {
 	  config = validateAndCloneConfig(config)
@@ -1362,13 +1415,13 @@
 
 
 /***/ },
-/* 23 */
+/* 24 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	const observer = __webpack_require__(7)
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 	const secret = {
 	  template: Symbol('content template'),
 	  separators: Symbol('content separators')
@@ -1514,7 +1567,7 @@
 
 
 /***/ },
-/* 24 */
+/* 25 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1601,12 +1654,12 @@
 
 
 /***/ },
-/* 25 */
+/* 26 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 	const secret = {
 	  params: Symbol('bindable params'),
 	  binder: Symbol('bindable binder')
@@ -1757,7 +1810,7 @@
 
 
 /***/ },
-/* 26 */
+/* 27 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1808,7 +1861,7 @@
 
 
 /***/ },
-/* 27 */
+/* 28 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1852,12 +1905,12 @@
 
 
 /***/ },
-/* 28 */
+/* 29 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 	const secret = {
 	  entering: Symbol('during entering animation'),
 	  leaving: Symbol('during leaving animation'),
@@ -2004,7 +2057,7 @@
 	  if (style.animationDuration === 'initial' || style.animationDuration === '') {
 	    elem.style.animationDuration = '1s'
 	  }
-	  if (style.animationFillMode === 'initial' || style.animationFillMode === '') {
+	  if (style.animationFillMode === 'initial' || style.animationFillMode === '' || style.animationFillMode === 'none') {
 	    style.animationFillMode = 'both'
 	  }
 	}
@@ -2056,12 +2109,12 @@
 
 
 /***/ },
-/* 29 */
+/* 30 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const symbols = __webpack_require__(11)
+	const symbols = __webpack_require__(12)
 	const secret = {
 	  config: Symbol('router config')
 	}
@@ -2180,12 +2233,12 @@
 
 
 /***/ },
-/* 30 */
+/* 31 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(11)
+	const exposed = __webpack_require__(12)
 	const secret = {
 	  config: Symbol('params sync config')
 	}
@@ -2299,12 +2352,12 @@
 
 
 /***/ },
-/* 31 */
+/* 32 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const symbols = __webpack_require__(11)
+	const symbols = __webpack_require__(12)
 	const secret = {
 	  config: Symbol('ref config')
 	}
@@ -2482,26 +2535,26 @@
 
 
 /***/ },
-/* 32 */
+/* 33 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  capitalize: __webpack_require__(33),
-	  uppercase: __webpack_require__(34),
-	  lowercase: __webpack_require__(35),
-	  unit: __webpack_require__(36),
-	  json: __webpack_require__(37),
-	  slice: __webpack_require__(38),
-	  date: __webpack_require__(39),
-	  time: __webpack_require__(40),
-	  datetime: __webpack_require__(41)
+	  capitalize: __webpack_require__(34),
+	  uppercase: __webpack_require__(35),
+	  lowercase: __webpack_require__(36),
+	  unit: __webpack_require__(37),
+	  json: __webpack_require__(38),
+	  slice: __webpack_require__(39),
+	  date: __webpack_require__(40),
+	  time: __webpack_require__(41),
+	  datetime: __webpack_require__(42)
 	}
 
 
 /***/ },
-/* 33 */
+/* 34 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2516,7 +2569,7 @@
 
 
 /***/ },
-/* 34 */
+/* 35 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2530,7 +2583,7 @@
 
 
 /***/ },
-/* 35 */
+/* 36 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2544,7 +2597,7 @@
 
 
 /***/ },
-/* 36 */
+/* 37 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2562,7 +2615,7 @@
 
 
 /***/ },
-/* 37 */
+/* 38 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2576,7 +2629,7 @@
 
 
 /***/ },
-/* 38 */
+/* 39 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2590,7 +2643,7 @@
 
 
 /***/ },
-/* 39 */
+/* 40 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2604,7 +2657,7 @@
 
 
 /***/ },
-/* 40 */
+/* 41 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2618,7 +2671,7 @@
 
 
 /***/ },
-/* 41 */
+/* 42 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2632,22 +2685,22 @@
 
 
 /***/ },
-/* 42 */
+/* 43 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  if: __webpack_require__(43),
-	  delay: __webpack_require__(44),
-	  debounce: __webpack_require__(45),
-	  throttle: __webpack_require__(46),
-	  key: __webpack_require__(47)
+	  if: __webpack_require__(44),
+	  delay: __webpack_require__(45),
+	  debounce: __webpack_require__(46),
+	  throttle: __webpack_require__(47),
+	  key: __webpack_require__(48)
 	}
 
 
 /***/ },
-/* 43 */
+/* 44 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2660,7 +2713,7 @@
 
 
 /***/ },
-/* 44 */
+/* 45 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2674,7 +2727,7 @@
 
 
 /***/ },
-/* 45 */
+/* 46 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2691,7 +2744,7 @@
 
 
 /***/ },
-/* 46 */
+/* 47 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2719,12 +2772,12 @@
 
 
 /***/ },
-/* 47 */
+/* 48 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const stringToCode = __webpack_require__(48)
+	const stringToCode = __webpack_require__(49)
 
 	module.exports = function keyLimiter (next, context, ...keys) {
 	  if (!(context.$event instanceof KeyboardEvent)) {
@@ -2740,7 +2793,7 @@
 
 
 /***/ },
-/* 48 */
+/* 49 */
 /***/ function(module, exports) {
 
 	// Source: http://jsfiddle.net/vWx8V/
@@ -2892,27 +2945,27 @@
 
 
 /***/ },
-/* 49 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	module.exports = {
-	  app: __webpack_require__(50),
-	  router: __webpack_require__(51)
-	}
-
-
-/***/ },
 /* 50 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
+	module.exports = {
+	  app: __webpack_require__(51),
+	  router: __webpack_require__(52)
+	}
+
+
+/***/ },
+/* 51 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
 	const core = __webpack_require__(5)
-	const middlewares = __webpack_require__(13)
-	const filters = __webpack_require__(32)
-	const limiters = __webpack_require__(42)
+	const middlewares = __webpack_require__(14)
+	const filters = __webpack_require__(33)
+	const limiters = __webpack_require__(43)
 
 	module.exports = function app (config) {
 	  config = Object.assign({root: true}, config)
@@ -2948,13 +3001,13 @@
 
 
 /***/ },
-/* 51 */
+/* 52 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	const core = __webpack_require__(5)
-	const middlewares = __webpack_require__(13)
+	const middlewares = __webpack_require__(14)
 
 	module.exports = function routerComp (config) {
 	  return core.component(config)
@@ -2963,14 +3016,14 @@
 
 
 /***/ },
-/* 52 */
+/* 53 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	// use Firebase and EventListener for simple real-time updates
-	const Firebase = __webpack_require__(53)
-	const EventListener = __webpack_require__(54)
+	const Firebase = __webpack_require__(54)
+	const EventListener = __webpack_require__(55)
 
 	const api = new Firebase('https://hacker-news.firebaseio.com/v0')
 	const store = new EventListener()
@@ -3046,7 +3099,7 @@
 
 
 /***/ },
-/* 53 */
+/* 54 */
 /***/ function(module, exports) {
 
 	/*! @license Firebase v2.4.2
@@ -3332,7 +3385,7 @@
 
 
 /***/ },
-/* 54 */
+/* 55 */
 /***/ function(module, exports) {
 
 	// Copyright Joyent, Inc. and other Node contributors.
@@ -3640,24 +3693,24 @@
 
 
 /***/ },
-/* 55 */
+/* 56 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	__webpack_require__(56)
-	__webpack_require__(59)
+	__webpack_require__(57)
 	__webpack_require__(60)
-	__webpack_require__(63)
-	__webpack_require__(66)
-	__webpack_require__(69)
-	__webpack_require__(72)
-	__webpack_require__(75)
-	__webpack_require__(78)
+	__webpack_require__(61)
+	__webpack_require__(64)
+	__webpack_require__(67)
+	__webpack_require__(70)
+	__webpack_require__(73)
+	__webpack_require__(76)
+	__webpack_require__(79)
 
 
 /***/ },
-/* 56 */
+/* 57 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3670,8 +3723,8 @@
 	// register the component as 'hacker-news', from now on it can be used as <hacker-news></hacker-news>
 	nx.components.app()
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(57),
-	    style: __webpack_require__(58)
+	    template: __webpack_require__(58),
+	    style: __webpack_require__(59)
 	  }))
 	  .useOnContent(nx.middlewares.filter('host', hostFilter))
 	  .useOnContent(nx.middlewares.filter('timeAgo', timeAgoFilter))
@@ -3697,19 +3750,19 @@
 
 
 /***/ },
-/* 57 */
+/* 58 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- adds routing logic with the router comp and route attributes -->\n<!-- the child which has a route attribute matching with the URL path is displayed -->\n<!-- adds leave animations to the router views -->\n<nav is=\"app-nav\"></nav>\n<app-router>\n  <story-list route=\"stories\" default-route leave-animation=\"fadeOut .6s\"></story-list>\n  <user-page route=\"user\" leave-animation=\"fadeOut .6s\"></user-page>\n  <story-page route=\"story\" leave-animation=\"fadeOut .6s\"></story-page>\n</app-router>\n"
 
 /***/ },
-/* 58 */
+/* 59 */
 /***/ function(module, exports) {
 
 	module.exports = "hacker-news {\n  display: block;\n  width: 85%;\n  margin: auto;\n  color: black;\n  background-color: #f6f6ef;\n  font: 10pt Verdana, Geneva, sans-serif;\n}\nhacker-news a {\n  color: inherit;\n  text-decoration: none;\n  cursor: pointer;\n}\nhacker-news .light {\n  color: #828282;\n}\nhacker-news .light a:hover {\n  text-decoration: underline;\n}\nhacker-news .subtext {\n  font-size: 7pt;\n}\n@media all and (max-width: 750px) {\n  body {\n    padding: 0;\n    margin: 0;\n  }\n  hacker-news {\n    width: 100%;\n  }\n}\n"
 
 /***/ },
-/* 59 */
+/* 60 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -3721,7 +3774,7 @@
 
 
 /***/ },
-/* 60 */
+/* 61 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3735,26 +3788,26 @@
 	    type: {type: 'string', default: 'top'}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(61),
-	    style: __webpack_require__(62)
+	    template: __webpack_require__(62),
+	    style: __webpack_require__(63)
 	  }))
 	  .register('app-nav')
 
 
 /***/ },
-/* 61 */
+/* 62 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- adds client side routing navigation with the iref and iref-params attributes -->\n<a iref=\"stories\" $iref-params=\"{type: 'top'}\"><b>Hacker News</b></a>\n<a iref=\"stories\" $iref-params=\"{type: 'new'}\" @class=\"{active: type === 'new'}\">new</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'show'}\" @class=\"{active: type === 'show'}\">show</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'ask'}\" @class=\"{active: type === 'ask'}\">ask</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'job'}\" @class=\"{active: type === 'job'}\">jobs</a>\n<span>Built with\n  <a href=\"http://nx-framework.com\" target=\"_blank\">NX</a> |\n  <a href=\"https://github.com/nx-hacker-news/nx-hacker-news.github.io\">Source</a>\n</span>\n"
 
 /***/ },
-/* 62 */
+/* 63 */
 /***/ function(module, exports) {
 
 	module.exports = "nav[is=\"app-nav\"] {\n  background-color: #ff6600;\n  padding: 4px;\n}\nnav[is=\"app-nav\"] a.active {\n  color: white;\n}\nnav[is=\"app-nav\"] b {\n  padding: 0 4px;\n}\nnav[is=\"app-nav\"] span {\n  color: white;\n  float: right;\n  font-size: 9pt;\n}\nnav[is=\"app-nav\"] span a:hover {\n  text-decoration: underline;\n}\n"
 
 /***/ },
-/* 63 */
+/* 64 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3770,8 +3823,8 @@
 	    page: {type: 'number', history: true, default: 0}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(64),
-	    style: __webpack_require__(65)
+	    template: __webpack_require__(65),
+	    style: __webpack_require__(66)
 	  }))
 	  .use(setup)
 	  .register('story-list')
@@ -3791,19 +3844,19 @@
 
 
 /***/ },
-/* 64 */
+/* 65 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"ids\" repeat-value=\"id\">\n  <story-item $story-id=\"id\" leave-animation=\"fadeOut .6s\" move-animation=\".6s\"></story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"ids\" repeat-value=\"id\">\n  <story-item $story-id=\"id\" move-animation=\".6s .3s\" leave-animation=\"fadeOut .6s\"></story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
 
 /***/ },
-/* 65 */
+/* 66 */
 /***/ function(module, exports) {
 
 	module.exports = "story-list {\n  display: block;\n  position: relative;\n  padding: 10px;\n  padding-bottom: 30px;\n  min-height: 1000px;\n}\nstory-list story-item {\n  margin-bottom: 8px;\n}\nstory-list .story-more {\n  position: absolute;\n  padding: 10px 0;\n  bottom: 0;\n}\n"
 
 /***/ },
-/* 66 */
+/* 67 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3814,8 +3867,8 @@
 	// register the component as 'story-item', from now on it can be used as <story-item></story-item>
 	nx.component()
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(67),
-	    style: __webpack_require__(68)
+	    template: __webpack_require__(68),
+	    style: __webpack_require__(69)
 	  }))
 	  .use(setup)
 	  .register('story-item')
@@ -3832,19 +3885,19 @@
 
 
 /***/ },
-/* 67 */
+/* 68 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story && !story.deleted && !story.dead && story.title\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div $if=\"story.url\">\n      <a $href=\"story.url\">${story.title}</a>\n      <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n    </div>\n    <div $if=\"!story.url\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n    </div>\n\n    <div $if=\"story.type === 'job'\" class=\"subtext light\">\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n    </div>\n    <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n      ${story.score | unit 'point'} by\n      <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n      <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n    </div>\n  </div>\n</div>\n"
 
 /***/ },
-/* 68 */
+/* 69 */
 /***/ function(module, exports) {
 
 	module.exports = "story-item {\n  display: block;\n  min-height: 27px;\n}\n"
 
 /***/ },
-/* 69 */
+/* 70 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3859,8 +3912,8 @@
 	    id: {type: 'number', readOnly: true, required: true}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(70),
-	    style: __webpack_require__(71)
+	    template: __webpack_require__(71),
+	    style: __webpack_require__(72)
 	  }))
 	  .use(setup)
 	  .register('story-page')
@@ -3873,19 +3926,19 @@
 
 
 /***/ },
-/* 70 */
+/* 71 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <story-item $story></story-item>\n    <dynamic-html $content=\"story.text\" class=\"story-text\"></dynamic-html>\n    <lu $repeat=\"story.kids\" repeat-value=\"commentId\">\n      <li is=\"comment-item\" $comment-id=\"commentId\"></li>\n    </lu>\n  </div>\n</div>\n"
 
 /***/ },
-/* 71 */
+/* 72 */
 /***/ function(module, exports) {
 
 	module.exports = "story-page {\n  display: block;\n  padding: 10px;\n}\nstory-page .story-text {\n  display: block;\n  margin: 20px 0;\n}\n"
 
 /***/ },
-/* 72 */
+/* 73 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3900,8 +3953,8 @@
 	    id: {type: 'string', readOnly: true, required: true}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(73),
-	    style: __webpack_require__(74)
+	    template: __webpack_require__(74),
+	    style: __webpack_require__(75)
 	  }))
 	  .use(setup)
 	  .register('user-page')
@@ -3914,19 +3967,19 @@
 
 
 /***/ },
-/* 73 */
+/* 74 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"user\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <p>user: ${user.id}</p>\n    <p>created: ${user.created}</p>\n    <p>karma: ${user.karma}</p>\n    <p>about: <dynamic-html $content=\"user.about\"></dynamic-html></p>\n  </div>\n</div>\n"
 
 /***/ },
-/* 74 */
+/* 75 */
 /***/ function(module, exports) {
 
 	module.exports = "user-page {\n  display: block;\n  padding: 10px;\n}\n"
 
 /***/ },
-/* 75 */
+/* 76 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3937,8 +3990,8 @@
 	// register the component as 'comment-item', from now on it can be used as <comment-item></comment-item>
 	nx.component({element: 'li'})
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(76),
-	    style: __webpack_require__(77)
+	    template: __webpack_require__(77),
+	    style: __webpack_require__(78)
 	  }))
 	  .use(setup)
 	  .register('comment-item')
@@ -3954,19 +4007,19 @@
 
 
 /***/ },
-/* 76 */
+/* 77 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <div class=\"comment-header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"comment-body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
 
 /***/ },
-/* 77 */
+/* 78 */
 /***/ function(module, exports) {
 
 	module.exports = "li[is=\"comment-item\"] {\n  margin: 20px 0;\n  font-size: 9pt;\n  list-style-type: none;\n}\nli[is=\"comment-item\"] .comment-header {\n  margin-bottom: 5px;\n}\nli[is=\"comment-item\"] .comment-body a {\n  text-decoration: underline;\n}\n"
 
 /***/ },
-/* 78 */
+/* 79 */
 /***/ function(module, exports) {
 
 	'use strict'

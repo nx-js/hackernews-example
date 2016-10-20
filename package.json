@@ -11,7 +11,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@risingstack/nx-framework": "^1.0.0-alpha.4.0.0",
+    "@risingstack/nx-framework": "^1.0.0-alpha.3.0.1",
     "@risingstack/nx-seo": "^1.0.3",
     "events": "^1.1.1",
     "express": "^4.14.0",
