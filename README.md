@@ -5,6 +5,13 @@
 A Hacker News clone built with [NX](http://nx-framework.com).
 It features client-side routing, real-time updates and animations.
 
+## Browser support
+
+NX is a next generation framework, supported only by the latest browsers. It works in the
+latest Chrome, Firefox Opera and Edge versions, Safari 10 and iOS 10. It doesn't work in any
+version of IE yet. The reason is the heavy usage of unpolyfillabe ES6 Proxies, which
+makes the NX data binding and reactivity system really simple with no surprise edge cases.
+
 ## Project structure
 
 You can find a readme in every directory of this project, that explains the code inside it.
@@ -20,10 +27,5 @@ The project is structured in the following way.
     It is used for local testing and serves as a simple server example for other applications.
   - [404.html](/404.html) is a hackish script to make Single Page Apps work with
     Github Pages hosting. For more information see [this repo](https://github.com/rafrex/spa-github-pages).
-
-## Browser support
-
-NX is a next generation framework, supported only by the latest browsers. It works in the
-latest Chrome, Firefox Opera and Edge versions, Safari 10 and iOS 10. It doesn't work in any
-version of IE yet. The reason is the heavy usage of unpolyfillabe ES6 Proxies, which
-makes the NX data binding and reactivity system really simple with no surprise edge cases.
+  - [checkNX.js](/checkNX.js) is a simple check, that detects if NX is supported in the current
+    browser and provides an explanation if it is not.    

@@ -124,16 +124,6 @@
 	  const observer = new MutationObserver(onMutations)
 	  observer.observe(document, {childList: true, subtree: true})
 
-	  // neha jo, neha nem -> de mindig ugy tunik hogy render utan fut le!!
-	  setInterval(emptyQueue, 0)
-	  function emptyQueue () {
-	    const mutations = observer.takeRecords()
-	    if (mutations.length) {
-	      console.log('emptying queue')
-	      onMutations(mutations)
-	    }
-	  }
-
 	  function onMutations (mutations) {
 	    for (let mutation of mutations) {
 	      Array.prototype.forEach.call(mutation.addedNodes, onNodeAdded)
