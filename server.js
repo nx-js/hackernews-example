@@ -2,7 +2,11 @@
 
 const seo = require('@risingstack/nx-seo')
 const express = require('express')
+const compression = require('compression')
 const app = express()
+
+// compress everything
+app.use(compression())
 
 // serve the static assets of the page first
 app.use(express.static(__dirname))

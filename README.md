@@ -19,7 +19,8 @@ The project is structured in the following way.
   - The [src](/src) folder includes the API and the NX components of the app.
   - The source is bundled with [Webpack](https://webpack.github.io/). You can find the simple
     bundling  config in [src](/webpack.config.js).
-  - [bundle.js](/bundle.js) is the source code and NX bundled together by Webpack.
+  - [bundle.js](/bundle.js) is the source code and NX bundled together by Webpack
+    and minified by UglifyJS.
   - [index.html](/index.html) imports the bundled source script and has a single
     `<hacker-news>` component in its body, that is an NX component defined in the src folder.
     The bundled source is imported as an async script for faster loading.
@@ -28,4 +29,4 @@ The project is structured in the following way.
   - [404.html](/404.html) is a hackish script to make Single Page Apps work with
     Github Pages hosting. For more information see [this repo](https://github.com/rafrex/spa-github-pages).
   - [checkNX.js](/checkNX.js) is a simple check, that detects if NX is supported in the current
-    browser and provides an explanation if it is not.    
+    browser and provides an explanation if it is not.
