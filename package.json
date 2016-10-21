@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack",
-    "minify": "uglifyjs bundle.js --compress --mangle --output bundle.js",
-    "prestart": "npm run build && npm run minify",
+    "minify": "uglifyjs bundle.js -c -m -o bundle.js",
+    "prestart": "npm run build",
     "start": "node server.js"
   },
   "author": "",
