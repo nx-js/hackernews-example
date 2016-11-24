@@ -63,23 +63,31 @@
 	/* WEBPACK VAR INJECTION */(function(module) {'use strict'
 
 	__webpack_require__(3)
-	const core = __webpack_require__(5)
 
 	const nx = {
-	  component: core.component,
-	  symbols: core.symbols,
-	  middlewares: __webpack_require__(14),
-	  filters: __webpack_require__(33),
-	  limiters: __webpack_require__(43),
-	  components: __webpack_require__(50),
-	  observer: __webpack_require__(7),
-	  compiler: __webpack_require__(17)
+	  component: __webpack_require__(5),
+	  middlewares: __webpack_require__(13),
+	  components: __webpack_require__(33),
+	  filters: __webpack_require__(36),
+	  limiters: __webpack_require__(46),
+	  observer: __webpack_require__(31),
+	  compiler: __webpack_require__(16)
+	}
+
+	for (let name in nx.filters) {
+	  nx.middlewares.expression.filter(name, nx.filters[name])
+	}
+
+	for (let name in nx.limiters) {
+	  nx.middlewares.code.limiter(name, nx.limiters[name])
 	}
 
 	if (module && module.exports) {
 	  module.exports = nx
 	}
-	window.nx = nx
+	if (window) {
+	  window.nx = nx
+	}
 
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)(module)))
 
@@ -190,10 +198,7 @@
 
 	'use strict'
 
-	module.exports = {
-	  component: __webpack_require__(6),
-	  symbols: __webpack_require__(12)
-	}
+	module.exports = __webpack_require__(6)
 
 
 /***/ },
@@ -202,11 +207,11 @@
 
 	'use strict'
 
-	const observer = __webpack_require__(7)
-	const validateConfig = __webpack_require__(9)
+	const validateConfig = __webpack_require__(7)
+	const validateMiddlewares = __webpack_require__(8)
+	const getContext = __webpack_require__(9)
 	const onNodeAdded = __webpack_require__(10)
-	const onNodeRemoved = __webpack_require__(13)
-	const symbols = __webpack_require__(12)
+	const onNodeRemoved = __webpack_require__(12)
 
 	const secret = {
 	  config: Symbol('component config'),
@@ -216,6 +221,8 @@
 	  childList: true,
 	  subtree: true
 	}
+	const addedNodeContext = {}
+	const addedNodes = new Set()
 
 	module.exports = function component (rawConfig) {
 	  return {use, useOnContent, register, [secret.config]: validateConfig(rawConfig)}
@@ -225,7 +232,9 @@
 	  if (typeof middleware !== 'function') {
 	    throw new TypeError('first argument must be a function')
 	  }
-	  this[secret.config].middlewares.push(middleware)
+	  const config = this[secret.config]
+	  config.middlewares = config.middlewares || []
+	  config.middlewares.push(middleware)
 	  return this
 	}
 
@@ -233,7 +242,12 @@
 	  if (typeof contentMiddleware !== 'function') {
 	    throw new TypeError('first argument must be a function')
 	  }
-	  this[secret.config].contentMiddlewares.push(contentMiddleware)
+	  const config = this[secret.config]
+	  if (config.isolate === true) {
+	    throw new Error('content middlewares can not be added to isolated components')
+	  }
+	  config.contentMiddlewares = config.contentMiddlewares || []
+	  config.contentMiddlewares.push(contentMiddleware)
 	  return this
 	}
 
@@ -241,243 +255,95 @@
 	  if (typeof name !== 'string') {
 	    throw new TypeError('first argument must be a string')
 	  }
-	  const parentProto = this[secret.config].element ? this[secret.config].elementProto : HTMLElement.prototype
+	  const config = this[secret.config]
+	  const parentProto = config.element ? config.elementProto : HTMLElement.prototype
 	  const proto = Object.create(parentProto)
-	  proto[secret.config] = this[secret.config]
+	  config.shouldValidate = validateMiddlewares(config.contentMiddlewares, config.middlewares)
+	  proto[secret.config] = config
 	  proto.attachedCallback = attachedCallback
-	  proto.detachedCallback = detachedCallback
-	  return document.registerElement(name, {prototype: proto, extends: this[secret.config].element})
+	  if (config.root) {
+	    proto.detachedCallback = detachedCallback
+	  }
+	  return document.registerElement(name, {prototype: proto, extends: config.element})
 	}
 
 	function attachedCallback () {
-	  if (!this[symbols.registered]) {
-	    if (typeof this[secret.config].state === 'object') {
-	      this[symbols.state] = this[secret.config].state
-	    } else if (this[secret.config].state === true) {
-	      this[symbols.state] = observer.observable()
-	    }
-	    if (this[secret.config].state === 'inherit') {
-	      this[symbols.inheritState] = true
+	  const config = this[secret.config]
+	  if (!this.$registered) {
+	    if (typeof config.state === 'object') {
+	      this.$state = config.state
+	    } else if (config.state === true) {
+	      this.$state = {}
+	    } else if (config.state === 'inherit') {
+	      this.$state = {}
+	      this.$inheritState = true
 	    }
 
-	    this[symbols.isolate] = this[secret.config].isolate
-	    this[symbols.contentMiddlewares] = this[secret.config].contentMiddlewares.slice()
-	    this[symbols.middlewares] = this[secret.config].middlewares.slice()
-	    this[symbols.root] = this[secret.config].root
-	    this[symbols.registered] = true
+	    this.$isolate = config.isolate
+	    this.$contentMiddlewares = config.contentMiddlewares
+	    this.$middlewares = config.middlewares
+	    this.$shouldValidate = config.shouldValidate
+	    this.$registered = true
 
-	    if (this[symbols.root]) {
+	    if (config.root) {
+	      this.$root = true
 	      this[secret.contentWatcher] = new MutationObserver(onMutations)
 	      this[secret.contentWatcher].observe(this, contentWatcherConfig)
+	      onNodeAdded(this, getContext(this.parentNode))
+	    } else {
+	      if (addedNodes.size === 0) {
+	        Promise.resolve().then(processAddedNodes)
+	      }
+	      addedNodes.add(this)
 	    }
-	    // it might be synchronous -> doesn't belong here -> should add it to the queue
-	    onNodeAdded(this)
 	  }
 	}
 
 	function detachedCallback () {
-	  if (this[secret.contentWatcher]) {
-	    this[secret.contentWatcher].disconnect()
+	  const contentWatcher = this[secret.contentWatcher]
+	  if (contentWatcher) {
+	    contentWatcher.disconnect()
 	  }
 	  onNodeRemoved(this)
 	}
 
 	function onMutations (mutations, contentWatcher) {
-	  for (let mutation of mutations) {
-	    Array.prototype.forEach.call(mutation.removedNodes, onNodeRemoved)
-	    Array.prototype.forEach.call(mutation.addedNodes, onNodeAdded)
+	  let mutationIndex = mutations.length
+	  while (mutationIndex--) {
+	    const mutation = mutations[mutationIndex]
+
+	    let nodes = mutation.removedNodes
+	    let nodeIndex = nodes.length
+	    while (nodeIndex--) {
+	      onNodeRemoved(nodes[nodeIndex])
+	    }
+
+	    nodes = mutation.addedNodes
+	    nodeIndex = nodes.length
+	    while (nodeIndex--) {
+	      addedNodes.add(nodes[nodeIndex])
+	    }
 	  }
-	  mutations = contentWatcher.takeRecords()
-	  if (mutations.length) {
-	    onMutations(mutations, contentWatcher)
+	  processAddedNodes()
+	}
+
+	function processAddedNodes () {
+	  addedNodes.forEach(processAddedNode, addedNodeContext)
+	  addedNodes.clear()
+	}
+
+	function processAddedNode (node) {
+	  const parentNode = node.parentNode
+	  if (this.parent !== parentNode) {
+	    this.parent = parentNode
+	    this.context = getContext(parentNode)
 	  }
+	  onNodeAdded(node, this.context)
 	}
 
 
 /***/ },
 /* 7 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const nextTick = __webpack_require__(8)
-	const proxy = Symbol('proxy')
-	const unobserverSet = Symbol('unobserverSet')
-	const observing = Symbol('observing')
-
-	const targets = new WeakMap()
-	const observerSet = new Set()
-	let currentObserver
-
-	module.exports = {
-	  observe,
-	  unobserve,
-	  observable,
-	  isObservable
-	}
-
-	function observe (fn) {
-	  if (typeof fn !== 'function') {
-	    throw new TypeError('first argument must be a function')
-	  }
-	  if (!fn[observing]) {
-	    fn[observing] = true
-	    fn[unobserverSet] = new Set()
-	    runObserver(fn)
-	  }
-	}
-
-	function unobserve (fn) {
-	  if (typeof fn !== 'function') {
-	    throw new TypeError('first argument must be a function')
-	  }
-	  if (fn[observing]) {
-	    fn[unobserverSet].forEach(runUnobserver)
-	    fn[unobserverSet] = undefined
-	  }
-	  fn[observing] = false
-	}
-
-	function observable (obj) {
-	  if (obj === undefined) {
-	    obj = {}
-	  }
-	  if (typeof obj !== 'object') {
-	    throw new TypeError('first argument must be an object or undefined')
-	  }
-	  if (isObservable(obj)) {
-	    return obj
-	  }
-	  if (typeof obj[proxy] === 'object') {
-	    return obj[proxy]
-	  }
-	  obj[proxy] = new Proxy(obj, {get: get, set: set, deleteProperty: deleteProperty})
-	  targets.set(obj, new Map())
-	  return obj[proxy]
-	}
-
-	function isObservable (obj) {
-	  if (typeof obj !== 'object') {
-	    throw new TypeError('first argument must be an object')
-	  }
-	  return (obj[proxy] === true)
-	}
-
-	function get (target, key, receiver) {
-	  if (key === proxy) {
-	    return true
-	  } else if (key === '$raw') {
-	    return target
-	  }
-	  const result = Reflect.get(target, key, receiver)
-	  if (currentObserver) {
-	    registerObserver(target, key, currentObserver)
-	    if (typeof result === 'object' && !(result instanceof Date)) {
-	      return observable(result)
-	    }
-	  }
-	  if (typeof result === 'object' && typeof result[proxy] === 'object') {
-	    return result[proxy]
-	  }
-	  return result
-	}
-
-	function registerObserver (target, key, observer) {
-	  let observersForKey = targets.get(target).get(key)
-	  if (!observersForKey) {
-	    observersForKey = new Set()
-	    targets.get(target).set(key, observersForKey)
-	  }
-	  if (!observersForKey.has(observer)) {
-	    observersForKey.add(observer)
-	    observer[unobserverSet].add(() => observersForKey.delete(observer))
-	  }
-	}
-
-	function set (target, key, value, receiver) {
-	  if (targets.get(target).has(key)) {
-	    targets.get(target).get(key).forEach(queueObserver)
-	  }
-	  return Reflect.set(target, key, value, receiver)
-	}
-
-	function deleteProperty (target, key) {
-	  if (targets.get(target).has(key)) {
-	    targets.get(target).get(key).forEach(queueObserver)
-	  }
-	  return Reflect.deleteProperty(target, key)
-	}
-
-	function queueObserver (observer) {
-	  if (observerSet.size === 0) {
-	    nextTick(runObservers)
-	  }
-	  observerSet.add(observer)
-	}
-
-	function runObservers () {
-	  try {
-	    observerSet.forEach(runObserver)
-	  } finally {
-	    observerSet.clear()
-	  }
-	}
-
-	function runObserver (observer) {
-	  if (observer[observing]) {
-	    currentObserver = observer
-	    try {
-	      observer()
-	    } finally {
-	      currentObserver = undefined
-	    }
-	  }
-	}
-
-	function runUnobserver (unobserver) {
-	  unobserver()
-	}
-
-
-/***/ },
-/* 8 */
-/***/ function(module, exports) {
-
-	'use strict'
-
-	let mutateWithTask
-	let currTask
-
-	if (typeof MutationObserver !== 'undefined') {
-	  let counter = 0
-	  const observer = new MutationObserver(onMutation)
-	  const textNode = document.createTextNode(String(counter))
-	  observer.observe(textNode, {characterData: true})
-
-	  function onMutation () {
-	    if (currTask) {
-	      currTask()
-	    }
-	  }
-
-	  mutateWithTask = function mutateWithTask () {
-	    counter = (counter + 1) % 2
-	    textNode.data = String(counter)
-	  }
-	}
-
-	module.exports = function nextTick (task) {
-	  currTask = task
-	  if (mutateWithTask) {
-	    mutateWithTask()
-	  } else {
-	    Promise.resolve().then(task)
-	  }
-	}
-
-
-/***/ },
-/* 9 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -532,10 +398,88 @@
 	  } else if (rawConfig.element !== undefined) {
 	    throw new Error(`invalid element config: ${rawConfig.element}, must be the name of a native element`)
 	  }
-
-	  resultConfig.contentMiddlewares = []
-	  resultConfig.middlewares = []
 	  return resultConfig
+	}
+
+
+/***/ },
+/* 8 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const names = new Set()
+	const missing = new Set()
+	const duplicates = new Set()
+
+	module.exports = function validateMiddlewares (contentMiddlewares, middlewares, strict) {
+	  names.clear()
+	  missing.clear()
+	  duplicates.clear()
+
+	  if (contentMiddlewares) {
+	    contentMiddlewares.forEach(validateMiddleware)
+	  }
+	  if (middlewares) {
+	    middlewares.forEach(validateMiddleware)
+	  }
+	  if (missing.size) {
+	    if (!strict) return true
+	    throw new Error(`missing middlewares: ${Array.from(missing).join()}`)
+	  }
+	  if (duplicates.size) {
+	    if (!strict) return true
+	    throw new Error(`duplicate middlewares: ${Array.from(duplicates).join()}`)
+	  }
+	}
+
+	function validateMiddleware (middleware) {
+	  const name = middleware.$name
+	  const require = middleware.$require
+	  if (name) {
+	    if (names.has(name)) {
+	      duplicates.add(name)
+	    }
+	    names.add(name)
+	  }
+	  if (require) {
+	    for (let dependency of require) {
+	      if (!names.has(dependency)) {
+	        missing.add(dependency)
+	      }
+	    }
+	  }
+	}
+
+
+/***/ },
+/* 9 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	module.exports = function getContext (node) {
+	  const context = {contentMiddlewares: []}
+
+	  while (node) {
+	    if (!context.state && node.$state) {
+	      context.state = node.$state
+	    }
+	    if (!context.state && node.$contextState) {
+	      context.state = node.$contextState
+	    }
+	    if (!context.isolate) {
+	      context.isolate = node.$isolate
+	      if (node.$contentMiddlewares) {
+	        context.contentMiddlewares = node.$contentMiddlewares.concat(context.contentMiddlewares)
+	      }
+	    }
+	    if (node.$root) {
+	      return context
+	    }
+	    node = node.parentNode
+	  }
+	  return context
 	}
 
 
@@ -545,187 +489,102 @@
 
 	'use strict'
 
-	const setupNode = __webpack_require__(11)
-	const symbols = __webpack_require__(12)
+	const validateMiddlewares = __webpack_require__(8)
+	const runMiddlewares = __webpack_require__(11)
 
-	module.exports = function onNodeAdded (node) {
-	  const context = getContext(node)
-	  setupNodeAndChildren(node, context.state, context.contentMiddlewares, context.hasRoot)
-	}
-
-	function setupNodeAndChildren (node, state, contentMiddlewares, hasRoot) {
-	  if (!shouldProcess(node, hasRoot)) return
-
-	  node[symbols.lifecycleStage] = 'attached'
-	  setupNode(node)
-
-	  if (node[symbols.root]) {
-	    hasRoot = true
-	  }
-
-	  if (node[symbols.contextState]) {
-	    state = node[symbols.contextState]
-	  } else {
-	    node[symbols.contextState] = state
-	  }
-
-	  if (node[symbols.state]) {
-	    node[symbols.state].$parent = state
-	    if (node[symbols.inheritState]) {
-	      Object.setPrototypeOf(node[symbols.state], state)
-	    }
-	    state = node[symbols.state]
-	  } else {
-	    node[symbols.state] = state
-	  }
-
-	  composeAndRunMiddlewares(node, state, contentMiddlewares.concat(node[symbols.middlewares]))
-	  setupChildren(node, state, contentMiddlewares, hasRoot)
-	}
-
-	function composeAndRunMiddlewares (node, state, middlewares) {
-	  (function next () {
-	    const middleware = middlewares.shift()
-	    if (middleware) {
-	      middleware(node, state, next)
-	      next()
-	    }
-	  })()
-	}
-
-	function setupChildren (node, state, contentMiddlewares, hasRoot) {
-	  if (node[symbols.isolate] === true) {
-	    return
-	  } else if (node[symbols.isolate] === 'middlewares') {
-	    contentMiddlewares = node[symbols.contentMiddlewares].slice()
-	  } else if (node[symbols.contentMiddlewares]) {
-	    contentMiddlewares = contentMiddlewares.concat(node[symbols.contentMiddlewares])
-	  }
-	  for (let i = 0; i < node.childNodes.length; i++) {
-	    setupNodeAndChildren(node.childNodes[i], state, contentMiddlewares, hasRoot)
-	  }
-	}
-
-	function shouldProcess (node, hasRoot) {
-	  if (hasRoot && node[symbols.root]) {
+	module.exports = function onNodeAdded (node, context) {
+	  const parent = node.parentNode
+	  const validParent = (parent && parent.$lifecycleStage === 'attached')
+	  if (validParent && node.$root) {
 	    throw new Error(`Nested root component: ${node.tagName}`)
 	  }
-	  const validRoot = (hasRoot || node[symbols.root])
-	  const validStage = (node[symbols.lifecycleStage] === undefined)
-	  const validParent = ((node.parentNode && node.parentNode[symbols.lifecycleStage] === 'attached') || node[symbols.root])
-	  const registered = (node[symbols.registered] || !(node instanceof Element) || (node.tagName.indexOf('-') === -1 && !node.hasAttribute('is')))
-
-	  return (validRoot && validStage && validParent && registered)
+	  if ((validParent || node.$root) && context.isolate !== true) {
+	    setupNodeAndChildren(node, context.state, context.contentMiddlewares)
+	  }
 	}
 
-	function getContext (node) {
-	  const context = {contentMiddlewares: []}
-	  let isolate = false
+	function setupNodeAndChildren (node, state, contentMiddlewares) {
+	  const type = node.nodeType
+	  if (!shouldProcess(node, type)) return
+	  node.$lifecycleStage = 'attached'
 
-	  node = node.parentNode
-	  while (node) {
-	    if (!context.state && node[symbols.state]) {
-	      context.state = node[symbols.state]
-	    }
-	    if (!context.state && node[symbols.contextState]) {
-	      context.state = node[symbols.contextState]
-	    }
-	    if (isolate !== true && isolate !== 'middlewares') {
-	      isolate = node[symbols.isolate]
-	    } else if (isolate === true) {
-	      context.isolate = true
-	      return context
-	    }
-	    if (node[symbols.contentMiddlewares] && !isolate) {
-	      context.contentMiddlewares.unshift(...node[symbols.contentMiddlewares])
-	    }
-	    if (node[symbols.root]) {
-	      context.hasRoot = true
-	    }
-	    node = node.parentNode
+	  node.$contextState = node.$contextState || state || node.$state
+	  node.$state = node.$state || node.$contextState
+	  if (node.$inheritState) {
+	    Object.setPrototypeOf(node.$state, node.$contextState)
 	  }
-	  return context
+
+	  if (node.$isolate === 'middlewares') {
+	    contentMiddlewares = node.$contentMiddlewares || []
+	  } else if (node.$contentMiddlewares) {
+	    contentMiddlewares = contentMiddlewares.concat(node.$contentMiddlewares)
+	  }
+	  if (node.$shouldValidate) {
+	    validateMiddlewares(contentMiddlewares, node.$middlewares, true)
+	  }
+	  node.$cleanup = $cleanup
+
+	  runMiddlewares(node, contentMiddlewares, node.$middlewares)
+
+	  if (type === 1 && node.$isolate !== true) {
+	    let child = node.firstChild
+	    while (child) {
+	      setupNodeAndChildren(child, node.$state, contentMiddlewares)
+	      child = child.nextSibling
+	    }
+	  }
+	}
+
+	function shouldProcess (node, type) {
+	  if (node.$lifecycleStage) {
+	    return false
+	  }
+	  if (type === 1) {
+	    return ((!node.hasAttribute('is') && node.tagName.indexOf('-') === -1) || node.$registered)
+	  }
+	  if (type === 3) {
+	    return node.nodeValue.trim()
+	  }
+	}
+
+	function $cleanup (fn, ...args) {
+	  if (typeof fn !== 'function') {
+	    throw new TypeError('first argument must be a function')
+	  }
+	  this.$cleaners = this.$cleaners || []
+	  this.$cleaners.push({fn, args})
 	}
 
 
 /***/ },
 /* 11 */
-/***/ function(module, exports, __webpack_require__) {
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const observer = __webpack_require__(7)
-	const symbols = __webpack_require__(12)
+	let node
+	let index, middlewares, middlewaresLength
+	let contentIndex, contentMiddlewares, contentMiddlewaresLength
 
-	module.exports = function setupNode (node) {
-	  node[symbols.cleanupFunctions] = []
-	  node[symbols.usedMiddlewareNames] = new Set()
-
-	  node.$using = $using
-	  node.$isUsing = $isUsing
-	  node.$require = $require
-	  node.$cleanup = $cleanup
-	  node.$observe = $observe
-	  node.$unobserve = $unobserve
+	module.exports = function runMiddlewares (currNode, currContentMiddlewares, currMiddlewares) {
+	  node = currNode
+	  middlewares = currMiddlewares
+	  contentMiddlewares = currContentMiddlewares
+	  middlewaresLength = currMiddlewares ? currMiddlewares.length : 0
+	  contentMiddlewaresLength = currContentMiddlewares ? currContentMiddlewares.length : 0
+	  index = contentIndex = 0
+	  next()
+	  node = middlewares = contentMiddlewares = undefined
 	}
 
-	function $using (...middlewareNames) {
-	  const duplicateMiddlewareNames = []
-
-	  for (let middlewareName of middlewareNames) {
-	    if (this[symbols.usedMiddlewareNames].has(middlewareName)) {
-	      duplicateMiddlewareNames.push(middlewareName)
-	    } else {
-	      this[symbols.usedMiddlewareNames].add(middlewareName)
-	    }
+	function next () {
+	  if (contentIndex < contentMiddlewaresLength) {
+	    contentMiddlewares[contentIndex++].call(node, node, node.$state, next)
+	    next()
+	  } else if (index < middlewaresLength) {
+	    middlewares[index++].call(node, node, node.$state, next)
+	    next()
 	  }
-	  if (duplicateMiddlewareNames.length) {
-	    throw new Error(`duplicate middlewares in ${this}: ${duplicateMiddlewareNames}`)
-	  }
-	}
-
-	function $isUsing (...middlewareNames) {
-	  for (let middlewareName of middlewareNames) {
-	    if (!this[symbols.usedMiddlewareNames].has(middlewareName)) {
-	      return false
-	    }
-	  }
-	  return true
-	}
-
-	function $require (...middlewareNames) {
-	  const missingMiddlewareNames = []
-
-	  for (let middlewareName of middlewareNames) {
-	    if (!this[symbols.usedMiddlewareNames].has(middlewareName)) {
-	      missingMiddlewareNames.push(middlewareName)
-	    }
-	  }
-	  if (missingMiddlewareNames.length) {
-	    throw new Error(`missing required middlewares in ${this}: ${missingMiddlewareNames}`)
-	  }
-	}
-
-	function $cleanup (fn) {
-	  if (typeof fn !== 'function') {
-	    throw new TypeError('first argument must be a function')
-	  }
-	  this[symbols.cleanupFunctions].push(fn)
-	}
-
-	function $observe (fn) {
-	  if (typeof fn !== 'function') {
-	    throw new TypeError('first argument must be a function')
-	  }
-	  observer.observe(fn)
-	  this.$cleanup(() => observer.unobserve(fn))
-	}
-
-	function $unobserve (fn) {
-	  if (typeof fn !== 'function') {
-	    throw new TypeError('first argument must be a function')
-	  }
-	  observer.unobserve(fn)
 	}
 
 
@@ -735,22 +594,31 @@
 
 	'use strict'
 
-	module.exports = {
-	  state: Symbol('state'),
-	  inheritState: Symbol('inherit state'),
-	  contextState: Symbol('context state'),
-	  isolate: Symbol('isolate'),
-	  middlewares: Symbol('middlewares'),
-	  contentMiddlewares: Symbol('content middlewares'),
-	  usedMiddlewareNames: Symbol('used middleware names'),
-	  cleanupFunctions: Symbol('cleanup functions'),
-	  lifecycleStage: Symbol('lifecycle stage'),
-	  root: Symbol('root component'),
-	  registered: Symbol('registered custom element'),
-	  filters: Symbol('filters'),
-	  limiters: Symbol('limiters'),
-	  routerLevel: Symbol('router level'),
-	  currentView: Symbol('current router view')
+	module.exports = function onNodeRemoved (node) {
+	  const parent = node.parentNode
+	  if (!parent || parent.$lifecycleStage === 'detached') {
+	    cleanupNodeAndChildren(node)
+	  }
+	}
+
+	function cleanupNodeAndChildren (node) {
+	  if (node.$lifecycleStage !== 'attached') return
+	  node.$lifecycleStage = 'detached'
+
+	  if (node.$cleaners) {
+	    node.$cleaners.forEach(runCleaner, node)
+	    node.$cleaners = undefined
+	  }
+
+	  let child = node.firstChild
+	  while (child) {
+	    cleanupNodeAndChildren(child)
+	    child = child.nextSibling
+	  }
+	}
+
+	function runCleaner (cleaner) {
+	  cleaner.fn.apply(this, cleaner.args)
 	}
 
 
@@ -760,82 +628,46 @@
 
 	'use strict'
 
-	const symbols = __webpack_require__(12)
-
-	module.exports = function onNodeRemoved (node) {
-	  if (!shouldProcess(node)) return
-	  node[symbols.lifecycleStage] = 'detached'
-
-	  const cleanupFunctions = node[symbols.cleanupFunctions]
-	  if (cleanupFunctions) {
-	    for (let cleanupFunction of cleanupFunctions) {
-	      cleanupFunction(node)
-	    }
-	  }
-	  Array.prototype.forEach.call(node.childNodes, onNodeRemoved)
-	}
-
-	function shouldProcess (node) {
-	  const validStage = (node[symbols.lifecycleStage] === 'attached')
-	  const validParent = (!node.parentNode || node.parentNode[symbols.lifecycleStage] === 'detached')
-	  return (validStage && validParent)
+	module.exports = {
+	  attributes: __webpack_require__(14),
+	  code: __webpack_require__(15),
+	  expression: __webpack_require__(17),
+	  events: __webpack_require__(18),
+	  interpolate: __webpack_require__(19),
+	  render: __webpack_require__(20),
+	  content: __webpack_require__(21),
+	  flow: __webpack_require__(22),
+	  bindable: __webpack_require__(23),
+	  bind: __webpack_require__(24),
+	  style: __webpack_require__(25),
+	  animate: __webpack_require__(26),
+	  router: __webpack_require__(27),
+	  params: __webpack_require__(28),
+	  ref: __webpack_require__(29),
+	  observe: __webpack_require__(30)
 	}
 
 
 /***/ },
 /* 14 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	module.exports = {
-	  attributes: __webpack_require__(15),
-	  code: __webpack_require__(16),
-	  expression: __webpack_require__(18),
-	  filter: __webpack_require__(19),
-	  limiter: __webpack_require__(20),
-	  events: __webpack_require__(21),
-	  interpolate: __webpack_require__(22),
-	  render: __webpack_require__(23),
-	  content: __webpack_require__(24),
-	  flow: __webpack_require__(25),
-	  bindable: __webpack_require__(26),
-	  bind: __webpack_require__(27),
-	  style: __webpack_require__(28),
-	  animate: __webpack_require__(29),
-	  router: __webpack_require__(30),
-	  params: __webpack_require__(31),
-	  ref: __webpack_require__(32)
-	}
-
-
-/***/ },
-/* 15 */
 /***/ function(module, exports) {
 
 	'use strict'
 
-	const secret = {
-	  handlers: Symbol('attribute handlers')
-	}
+	const handlers = new Map()
+	const attributeCache = new Map()
 
-	module.exports = function attributes (elem, state, next) {
-	  if (!(elem instanceof Element)) return
-	  elem.$require('expression')
-	  elem.$using('attributes')
+	function attributes (elem, state, next) {
+	  if (elem.nodeType !== 1) return
 
-	  elem.$hasAttribute = $hasAttribute
+	  handlers.clear()
 	  elem.$attribute = $attribute
-
 	  next()
-
-	  processAttributesWithoutHandler(elem)
-	  processAttributesWithHandler(elem)
+	  handleAttributes(elem, getAttributes(elem))
 	}
-
-	function $hasAttribute (name) {
-	  return (this.hasAttribute(name) || this.hasAttribute('$' + name) || this.hasAttribute('@' + name))
-	}
+	attributes.$name = 'attributes'
+	attributes.$require = ['observe', 'expression']
+	module.exports = attributes
 
 	function $attribute (name, handler) {
 	  if (typeof name !== 'string') {
@@ -844,427 +676,493 @@
 	  if (typeof handler !== 'function') {
 	    throw new TypeError('second argument must be a function')
 	  }
-	  if (!this[secret.handlers]) {
-	    this[secret.handlers] = new Map()
-	  }
-	  this[secret.handlers].set(name, handler)
+	  handlers.set(name, handler)
 	}
 
-	function processAttributesWithoutHandler (elem) {
-	  const attributesToRemove = []
-
-	  Array.prototype.forEach.call(elem.attributes, (attribute) => {
-	    if (attribute.name[0] === '$') {
-	      const name = attribute.name.slice(1)
-	      if (!elem[secret.handlers] || !elem[secret.handlers].has(name)) {
-	        const expression = elem.$compileExpression(attribute.value || name)
-	        const value = expression()
-	        if (value) elem.setAttribute(name, value)
-	        else elem.removeAttribute(name)
-	        attributesToRemove.push(attribute.name)
-	      }
-	    } else if (attribute.name[0] === '@') {
-	      const name = attribute.name.slice(1)
-	      if (!elem[secret.handlers] || !elem[secret.handlers].has(name)) {
-	        const expression = elem.$compileExpression(attribute.value || name)
-	        elem.$observe(() => {
-	          const value = expression()
-	          if (value) elem.setAttribute(name, value)
-	          else elem.removeAttribute(name)
-	        })
-	        attributesToRemove.push(attribute.name)
-	      }
+	function getAttributes (elem) {
+	  const cloneId = elem.getAttribute('clone-id')
+	  if (cloneId) {
+	    let attributes = attributeCache.get(cloneId)
+	    if (!attributes) {
+	      attributes = Array.prototype.map.call(elem.attributes, cacheAttribute)
+	      attributeCache.set(cloneId, attributes)
 	    }
-	  })
+	    return attributes
+	  }
+	  return elem.attributes
+	}
 
-	  for (let attribute of attributesToRemove) {
-	    elem.removeAttribute(attribute)
+	function cacheAttribute (attr) {
+	  return {name: attr.name, value: attr.value}
+	}
+
+	function handleAttributes (elem, attributes) {
+	  let i = attributes.length
+	  while (i--) {
+	    const attr = attributes[i]
+	    const type = attr.name[0]
+
+	    if (type === '@') {
+	      attr.$name = attr.$name || (attr.name.slice(0, 6) === '@data-' ? attr.name.slice(6) : attr.name.slice(1))
+	      attr.$expression = attr.$expression || elem.$compileExpression(attr.value || attr.$name)
+	      const handler = handlers.get(attr.$name) || defaultHandler
+	      elem.$observe(expressionHandler, attr, handler)
+	      continue
+	    }
+
+	    if (type === '$') {
+	      attr.$name = attr.$name || (attr.name.slice(0, 6) === '$data-' ? attr.name.slice(6) : attr.name.slice(1))
+	      attr.$expression = attr.$expression || elem.$compileExpression(attr.value || attr.$name)
+	      const handler = handlers.get(attr.$name) || defaultHandler
+	      expressionHandler.call(elem, attr, handler)
+	      continue
+	    }
+
+	    attr.$name = attr.$name || (attr.name.slice(0, 5) === 'data-' ? attr.name.slice(5) : attr.name)
+	    const handler = handlers.get(attr.$name)
+	    if (handler) {
+	      handler.call(elem, attr.value, attr.$name)
+	    }
 	  }
 	}
 
-	function processAttributesWithHandler (elem) {
-	  if (!elem[secret.handlers]) return
-	  const attributesToRemove = []
-
-	  elem[secret.handlers].forEach((handler, name) => {
-	    const onceName = '$' + name
-	    const observedName = '@' + name
-
-	    if (elem.hasAttribute(onceName)) {
-	      const expression = elem.$compileExpression(elem.getAttribute(onceName) || name)
-	      handler(expression(), elem)
-	      attributesToRemove.push(onceName)
-	    } else if (elem.hasAttribute(observedName)) {
-	      const expression = elem.$compileExpression(elem.getAttribute(observedName) || name)
-	      elem.$observe(() => handler(expression(), elem))
-	      attributesToRemove.push(observedName)
-	    } else if (elem.hasAttribute(name)) {
-	      handler(elem.getAttribute(name), elem)
-	    }
-	  })
-
-	  for (let attribute of attributesToRemove) {
-	    elem.removeAttribute(attribute)
+	function defaultHandler (value, name) {
+	  if (value) {
+	    this.setAttribute(name, value)
+	  } else {
+	    this.removeAttribute(name)
 	  }
+	}
+
+	function expressionHandler (attr, handler) {
+	  const value = attr.$expression(this.$contextState)
+	  handler.call(this, value, attr.$name)
 	}
 
 
 /***/ },
-/* 16 */
+/* 15 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(17)
-	const exposed = __webpack_require__(12)
+	const compiler = __webpack_require__(16)
 
 	const limiterRegex = /(?:[^\&]|\&\&)+/g
 	const argsRegex = /\S+/g
+	const codeCache = new Map()
+	const limiters = new Map()
 
-	module.exports = function code (node, state) {
-	  node.$using('code')
+	function code (node) {
 	  node.$compileCode = $compileCode
 	}
+	code.$name = 'code'
+	code.limiter = limiter
+	module.exports = code
 
 	function $compileCode (rawCode) {
 	  if (typeof rawCode !== 'string') {
 	    throw new TypeError('first argument must be a string')
 	  }
-	  const code = parseCode(this, rawCode)
-	  const contextState = this[exposed.contextState]
-	  const context = {}
+	  let code = codeCache.get(rawCode)
+	  if (!code) {
+	    code = parseCode(rawCode)
+	    codeCache.set(rawCode, code)
+	  }
 
-	  return function evaluateCode (expando) {
-	    const backup = createBackup(contextState, expando)
+	  if (typeof code === 'function') {
+	    return code
+	  }
+
+	  const context = {}
+	  return function evaluateCode (state, tempVars) {
 	    let i = 0
 	    function next () {
-	      try {
-	        Object.assign(contextState, expando)
-	        Object.assign(context, expando)
-	        if (i < code.limiters.length) {
-	          const limiter = code.limiters[i++]
-	          const args = limiter.argExpressions.map(evaluateArgExpression)
-	          limiter.effect(next, context, ...args)
-	        } else {
-	          code.exec()
-	        }
-	      } finally {
-	        Object.assign(contextState, backup)
-	        Object.assign(context, backup)
+	      Object.assign(context, tempVars)
+	      if (i < code.limiters.length) {
+	        const limiter = code.limiters[i++]
+	        const args = limiter.argExpressions.map(evaluateArgExpression, state)
+	        limiter.effect(next, context, ...args)
+	      } else {
+	        code.exec(state, tempVars)
 	      }
 	    }
 	    next()
 	  }
 	}
 
-	function parseCode (node, rawCode) {
+	function parseCode (rawCode) {
 	  const tokens = rawCode.match(limiterRegex)
-	  const code = {
-	    exec: compiler.compileCode(tokens.shift(), node[exposed.contextState]),
-	    limiters: []
+	  if (tokens.length === 1) {
+	    return compiler.compileCode(tokens[0])
 	  }
 
-	  for (let limiterToken of tokens) {
-	    limiterToken = limiterToken.match(argsRegex) || []
-	    const limiterName = limiterToken.shift()
-	    if (!node[exposed.limiters] || !node[exposed.limiters].has(limiterName)) {
-	      throw new Error(`there is no limiter named ${limiterName} on ${node}`)
+	  const code = {
+	    exec: compiler.compileCode(tokens[0]),
+	    limiters: []
+	  }
+	  for (let i = 1; i < tokens.length; i++) {
+	    const limiterTokens = tokens[i].match(argsRegex) || []
+	    const limiterName = limiterTokens.shift()
+	    const effect = limiters.get(limiterName)
+	    if (!effect) {
+	      throw new Error(`there is no limiter named ${limiterName}`)
 	    }
-	    const effect = node[exposed.limiters].get(limiterName)
-	    const argExpressions = limiterToken.map(compileArgExpression, node)
-	    code.limiters.push({effect, argExpressions})
+	    code.limiters.push({effect, argExpressions: limiterTokens.map(compileArgExpression)})
 	  }
 	  return code
 	}
 
 	function evaluateArgExpression (argExpression) {
-	  return argExpression()
+	  return argExpression(this)
 	}
 
 	function compileArgExpression (argExpression) {
-	  return compiler.compileExpression(argExpression, this[exposed.contextState])
+	  return compiler.compileExpression(argExpression)
 	}
 
-	function createBackup (state, expando) {
-	  if (!expando) return undefined
-
-	  const backup = {}
-	  for (let key in expando) {
-	    backup[key] = state[key]
+	function limiter (name, handler) {
+	  if (typeof name !== 'string') {
+	    throw new TypeError('first argument must be a string')
 	  }
-	  return backup
+	  if (typeof handler !== 'function') {
+	    throw new TypeError('second argument must be a function')
+	  }
+	  if (limiters.has(name)) {
+	    throw new Error(`a limiter named ${name} is already registered`)
+	  }
+	  limiters.set(name, handler)
+	  return this
 	}
 
 
 /***/ },
-/* 17 */
+/* 16 */
 /***/ function(module, exports) {
 
-	'use strict'
+	/* WEBPACK VAR INJECTION */(function(global) {'use strict'
 
 	module.exports = {
 	  compileCode,
 	  compileExpression
 	}
 
-	function compileExpression (src, sandbox) {
+	let globalObj
+	if (typeof window !== 'undefined') globalObj = window // eslint-disable-line
+	else if (typeof global !== 'undefined') globalObj = global // eslint-disable-line
+	else if (typeof self !== 'undefined') globalObj = self // eslint-disable-line
+	globalObj.$nxCompileToSandbox = toSandbox
+	globalObj.$nxCompileCreateBackup = createBackup
+
+	const proxies = new WeakMap()
+	const expressionCache = new Map()
+	const codeCache = new Map()
+	const handlers = {has}
+
+	function compileExpression (src) {
 	  if (typeof src !== 'string') {
 	    throw new TypeError('first argument must be a string')
 	  }
-	  if (typeof sandbox !== 'object') {
-	    throw new TypeError('second argument must be an object')
+	  let expression = expressionCache.get(src)
+	  if (!expression) {
+	    expression = new Function('context', // eslint-disable-line
+	      `const sandbox = $nxCompileToSandbox(context)
+	      try { with (sandbox) { return ${src} } } catch (err) {
+	        if (!(err instanceof TypeError)) throw err
+	      }`)
+	    expressionCache.set(src, expression)
 	  }
-
-	  sandbox = new Proxy(sandbox, {get, has})
-	  const expression = `
-	  try { with (sandbox) { return ${src} } } catch (err) {
-	    if (!(err instanceof ReferenceError || err instanceof TypeError)) throw err
-	  }`
-	  return new Function('sandbox', expression).bind(sandbox, sandbox) // eslint-disable-line
+	  return expression
 	}
 
-	function compileCode (src, sandbox) {
+	function compileCode (src) {
 	  if (typeof src !== 'string') {
 	    throw new TypeError('first argument must be a string')
 	  }
-	  if (typeof sandbox !== 'object') {
-	    throw new TypeError('second argument must be an object')
+	  let code = codeCache.get(src)
+	  if (!code) {
+	    code = new Function('context, tempVars', // eslint-disable-line
+	    `const backup = $nxCompileCreateBackup(context, tempVars)
+	    Object.assign(context, tempVars)
+	    const sandbox = $nxCompileToSandbox(context)
+	    try {
+	      with (sandbox) { ${src} }
+	    } finally {
+	      Object.assign(context, backup)
+	    }`)
+	    codeCache.set(src, code)
 	  }
-
-	  sandbox = new Proxy(sandbox, {get, has})
-	  return new Function('sandbox', `with (sandbox) { ${src} }`).bind(sandbox, sandbox) // eslint-disable-line
+	  return code
 	}
 
-	function get (target, key, receiver) {
-	  if (key === Symbol.unscopables) {
-	    return undefined
+	function toSandbox (obj) {
+	  if (typeof obj !== 'object') {
+	    throw new TypeError('first argument must be an object')
 	  }
-	  return Reflect.get(target, key, receiver)
+	  let sandbox = proxies.get(obj)
+	  if (!sandbox) {
+	    sandbox = new Proxy(obj, handlers)
+	    proxies.set(obj, sandbox)
+	  }
+	  return sandbox
 	}
 
-	function has (target, key) {
+	function createBackup (context, tempVars) {
+	  if (typeof tempVars === 'object') {
+	    const backup = {}
+	    for (let key of Object.keys(tempVars)) {
+	      backup[key] = context[key]
+	    }
+	    return backup
+	  }
+	}
+
+	function has () {
 	  return true
 	}
 
+	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
 
 /***/ },
-/* 18 */
+/* 17 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(17)
-	const exposed = __webpack_require__(12)
+	const compiler = __webpack_require__(16)
 
 	const filterRegex = /(?:[^\|]|\|\|)+/g
 	const argsRegex = /\S+/g
+	const expressionCache = new Map()
+	const filters = new Map()
 
-	module.exports = function expression (node, state) {
-	  node.$using('expression')
+	function expression (node) {
 	  node.$compileExpression = $compileExpression
 	}
+	expression.$name = 'expression'
+	expression.filter = filter
+	module.exports = expression
 
 	function $compileExpression (rawExpression) {
 	  if (typeof rawExpression !== 'string') {
 	    throw new TypeError('first argument must be a string')
 	  }
-	  const expression = parseExpression(this, rawExpression)
+	  let expression = expressionCache.get(rawExpression)
+	  if (!expression) {
+	    expression = parseExpression(rawExpression)
+	    expressionCache.set(rawExpression, expression)
+	  }
 
-	  return function evaluateExpression () {
-	    let value = expression.exec()
+	  if (typeof expression === 'function') {
+	    return expression
+	  }
+
+	  return function evaluateExpression (contextState) {
+	    let value = expression.exec(contextState)
 	    for (let filter of expression.filters) {
-	      const args = filter.argExpressions.map(evaluateArgExpression)
+	      const args = filter.argExpressions.map(evaluateArgExpression, contextState)
 	      value = filter.effect(value, ...args)
 	    }
 	    return value
 	  }
 	}
 
-	function parseExpression (node, rawExpression) {
+	function parseExpression (rawExpression) {
 	  const tokens = rawExpression.match(filterRegex)
-	  const expression = {
-	    exec: compiler.compileExpression(tokens.shift(), node[exposed.contextState]),
-	    filters: []
+	  if (tokens.length === 1) {
+	    return compiler.compileExpression(tokens[0])
 	  }
 
-	  for (let filterToken of tokens) {
-	    filterToken = filterToken.match(argsRegex) || []
-	    const filterName = filterToken.shift()
-	    if (!node[exposed.filters] || !node[exposed.filters].has(filterName)) {
-	      throw new Error(`there is no filter named ${filterName} on ${node}`)
+	  const expression = {
+	    exec: compiler.compileExpression(tokens[0]),
+	    filters: []
+	  }
+	  for (let i = 1; i < tokens.length; i++) {
+	    let filterTokens = tokens[i].match(argsRegex) || []
+	    const filterName = filterTokens.shift()
+	    const effect = filters.get(filterName)
+	    if (!effect) {
+	      throw new Error(`there is no filter named ${filterName}`)
 	    }
-	    const effect = node[exposed.filters].get(filterName)
-	    const argExpressions = filterToken.map(compileArgExpression, node)
-	    expression.filters.push({effect, argExpressions})
+	    expression.filters.push({effect, argExpressions: filterTokens.map(compileArgExpression)})
 	  }
 	  return expression
 	}
 
 	function evaluateArgExpression (argExpression) {
-	  return argExpression()
+	  return argExpression(this)
 	}
 
 	function compileArgExpression (argExpression) {
-	  return compiler.compileExpression(argExpression, this[exposed.contextState])
+	  return compiler.compileExpression(argExpression)
+	}
+
+	function filter (name, handler) {
+	  if (typeof name !== 'string') {
+	    throw new TypeError('first argument must be a string')
+	  }
+	  if (typeof handler !== 'function') {
+	    throw new TypeError('second argument must be a function')
+	  }
+	  if (filters.has(name)) {
+	    throw new Error(`a filter named ${name} is already registered`)
+	  }
+	  filters.set(name, handler)
+	  return this
+	}
+
+
+/***/ },
+/* 18 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const secret = {
+	  handlers: Symbol('event handlers')
+	}
+	const handlerCache = new Map()
+	const handledEvents = new Set()
+
+	function events (elem) {
+	  if (elem.nodeType !== 1) return
+	  elem[secret.handlers] = getEventHandlers(elem)
+	}
+	events.$name = 'events'
+	events.$require = ['code']
+	module.exports = events
+
+	function getEventHandlers (elem) {
+	  const cloneId = elem.getAttribute('clone-id')
+	  if (cloneId) {
+	    let handlers = handlerCache.get(cloneId)
+	    if (handlers === undefined) {
+	      handlers = createEventHandlers(elem)
+	      handlerCache.set(cloneId, handlers)
+	    }
+	    return handlers
+	  }
+	  return createEventHandlers(elem)
+	}
+
+	function createEventHandlers (elem) {
+	  let handlers = false
+	  const attributes = elem.attributes
+	  let i = attributes.length
+	  while (i--) {
+	    const attribute = attributes[i]
+	    if (attribute.name[0] === '#') {
+	      handlers = handlers || new Map()
+	      const handler = elem.$compileCode(attribute.value)
+	      const names = attribute.name.slice(1).split(',')
+	      for (let name of names) {
+	        let typeHandlers = handlers.get(name)
+	        if (!typeHandlers) {
+	          typeHandlers = new Set()
+	          handlers.set(name, typeHandlers)
+	        }
+	        typeHandlers.add(handler)
+	        if (!handledEvents.has(name)) {
+	          document.addEventListener(name, listener, true)
+	          handledEvents.add(name)
+	        }
+	      }
+	    }
+	  }
+	  return handlers
+	}
+
+	function listener (event) {
+	  const type = event.type
+	  let elem = event.target
+	  while (elem) {
+	    runHandler(elem, event, type)
+	    if (elem.$root) return
+	    elem = elem.parentNode
+	  }
+	}
+
+	function runHandler (elem, event, type) {
+	  const handlers = elem[secret.handlers]
+	  if (handlers) {
+	    const typeHandlers = handlers.get(type)
+	    if (typeHandlers) {
+	      for (let handler of typeHandlers) {
+	        handler(elem.$contextState, { $event: event })
+	      }
+	    }
+	  }
 	}
 
 
 /***/ },
 /* 19 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const exposed = __webpack_require__(12)
-
-	module.exports = function filterFactory (name, handler) {
-	  if (typeof name !== 'string') {
-	    throw new TypeError('first argument must be a string')
-	  }
-	  if (typeof handler !== 'function') {
-	    throw new TypeError('second argument must be a function')
-	  }
-
-	  return function filter (elem, state) {
-	    elem.$require('expression')
-
-	    if (!elem[exposed.filters]) {
-	      elem[exposed.filters] = new Map()
-	    }
-	    elem[exposed.filters].set(name, handler)
-	  }
-	}
-
-
-/***/ },
-/* 20 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const exposed = __webpack_require__(12)
-
-	module.exports = function limiterFactory (name, handler) {
-	  if (typeof name !== 'string') {
-	    throw new TypeError('first argument must be a string')
-	  }
-	  if (typeof handler !== 'function') {
-	    throw new TypeError('second argument must be a function')
-	  }
-
-	  return function limiter (elem, state) {
-	    elem.$require('code')
-
-	    if (!elem[exposed.limiters]) {
-	      elem[exposed.limiters] = new Map()
-	    }
-	    elem[exposed.limiters].set(name, handler)
-	  }
-	}
-
-
-/***/ },
-/* 21 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const compiler = __webpack_require__(17)
-
-	const secret = {
-	  handlers: Symbol('event handlers')
-	}
-
-	module.exports = function events (elem, state, next) {
-	  if (!(elem instanceof Element)) return
-	  elem.$require('code')
-	  elem.$using('events')
-
-	  next()
-
-	  for (let i = 0; i < elem.attributes.length; i++) {
-	    const attribute = elem.attributes[i]
-
-	    if (attribute.name[0] === '#') {
-	      const handler = elem.$compileCode(attribute.value)
-
-	      if (!elem[secret.handlers]) {
-	        elem[secret.handlers] = new Map()
-	      }
-
-	      const names = attribute.name.slice(1).split(',')
-	      for (let name of names) {
-	        let handlers = elem[secret.handlers].get(name)
-	        if (!handlers) {
-	          handlers = new Set()
-	          elem[secret.handlers].set(name, handlers)
-	        }
-	        handlers.add(handler)
-	        elem.addEventListener(name, listener, true)
-	      }
-	    }
-	  }
-	}
-
-	function listener (event) {
-	  const handlers = this[secret.handlers].get(event.type)
-	  for (let handler of handlers) {
-	    handler({ $event: event })
-	  }
-	}
-
-
-/***/ },
-/* 22 */
 /***/ function(module, exports) {
 
 	'use strict'
 
-	module.exports = function interpolate (node, state, next) {
-	  if (node.nodeType !== Node.TEXT_NODE) return
-	  node.$require('expression')
-	  node.$using('interpolate')
-	  next()
-	  interpolateValue(node, state)
+	const tokenCache = new Map()
+
+	function interpolate (node) {
+	  if (node.nodeType !== 3) return
+	  createTokens(node).forEach(processToken, node)
+	}
+	interpolate.$name = 'interpolate'
+	interpolate.$require = ['observe', 'expression']
+	module.exports = interpolate
+
+	function createTokens (node) {
+	  const nodeValue = node.nodeValue
+	  let tokens = tokenCache.get(nodeValue)
+	  if (!tokens) {
+	    tokens = parseValue(node.nodeValue)
+	    tokenCache.set(nodeValue, tokens)
+	    return tokens
+	  }
+	  return tokens.map(cloneToken)
 	}
 
-	function interpolateValue (node, state) {
-	  const tokens = parseValue(node.nodeValue)
-
-	  tokens.forEach((token) => {
-	    if (typeof token === 'object') {
-	      const expression = node.$compileExpression(token.expression)
-	      if (token.observed) {
-	        node.$observe(() => interpolateToken(token, expression(), tokens, node))
-	      } else {
-	        interpolateToken(token, expression(), tokens, node)
-	      }
+	function cloneToken (token) {
+	  if (typeof token === 'object') {
+	    return {
+	      observed: token.observed,
+	      expression: token.expression,
+	      toString: token.toString
 	    }
-	  })
+	  }
+	  return token
 	}
 
-	function interpolateToken (token, value, tokens, node) {
-	  if (value === undefined) value = ''
-	  if (token.value !== value) {
-	    token.value = value
-	    node.nodeValue = tokens.map(tokenToString).join('')
+	function processToken (token, index, tokens) {
+	  if (typeof token === 'object') {
+	    const expression = this.$compileExpression(token.expression)
+	    if (token.observed) {
+	      this.$observe(interpolateToken, expression, token, tokens)
+	    } else {
+	      interpolateToken.call(this, expression, token, tokens)
+	    }
 	  }
 	}
 
-	function tokenToString (token) {
-	  return (typeof token === 'object') ? token.value : token
+	function interpolateToken (expression, token, tokens) {
+	  let value = expression(this.$state)
+	  value = (value !== undefined) ? value : ''
+	  if (token.value !== value) {
+	    token.value = value
+	    this.nodeValue = (1 < tokens.length) ? tokens.join('') : value
+	  }
 	}
 
 	function parseValue (string) {
 	  const tokens = []
+	  const length = string.length
 	  let expression = false
 	  let anchor = 0
 	  let depth = 0
-	  let char
 	  let token
 
-	  for (let i = 0; i < string.length; i++) {
-	    char = string.charAt(i)
+	  for (let i = 0; i < length; i++) {
+	    const char = string[i]
 
 	    if (expression) {
 	      if (char === '{') {
@@ -1275,15 +1173,18 @@
 
 	      if (depth === 0) {
 	        token.expression = string.slice(anchor, i)
+	        token.toString = tokenToString
 	        tokens.push(token)
 	        anchor = i + 1
 	        expression = false
 	      }
 	    } else {
-	      if (i === string.length - 1) {
+	      if (i === length - 1) {
 	        tokens.push(string.slice(anchor, i + 1))
 	      } else if ((char === '$' || char === '@') && string.charAt(i + 1) === '{') {
-	        tokens.push(string.slice(anchor, i))
+	        if (i !== anchor) {
+	          tokens.push(string.slice(anchor, i))
+	        }
 	        token = {observed: (char === '@')}
 	        anchor = i + 2
 	        depth = 0
@@ -1294,16 +1195,18 @@
 	  return tokens
 	}
 
+	function tokenToString () {
+	  return String(this.value)
+	}
+
 
 /***/ },
-/* 23 */
-/***/ function(module, exports, __webpack_require__) {
+/* 20 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(12)
-
-	module.exports = function render (config) {
+	module.exports = function renderFactory (config) {
 	  config = validateAndCloneConfig(config)
 	  if (config.cache) {
 	    config.template = cacheTemplate(config.template)
@@ -1315,11 +1218,10 @@
 	    document.head.appendChild(styleContainer)
 	  }
 
-	  return function renderMiddleware (elem, state) {
-	    if (!(elem instanceof Element)) {
+	  function render (elem) {
+	    if (elem.nodeType !== 1) {
 	      throw new Error('render only works with element nodes')
 	    }
-	    elem.$using('render')
 
 	    let template
 	    if (config.cache) {
@@ -1327,12 +1229,14 @@
 	    } else {
 	      template = cacheTemplate(config.template)
 	    }
-	    composeContentWithTemplate(elem, state, template)
+	    composeContentWithTemplate(elem, template)
 	    elem.appendChild(template)
 	  }
+	  render.$name = 'render'
+	  return render
 	}
 
-	function composeContentWithTemplate (elem, state, template) {
+	function composeContentWithTemplate (elem, template) {
 	  let defaultSlot
 
 	  Array.prototype.forEach.call(template.querySelectorAll('slot'), (slot) => {
@@ -1342,7 +1246,7 @@
 	        clearContent(slot)
 	        for (let i = 0; i < slotFillers.length; i++) {
 	          const slotFiller = slotFillers[i]
-	          slotFiller[exposed.contextState] = elem[exposed.contextState]
+	          slotFiller.$contextState = elem.$contextState
 	          slot.appendChild(slotFiller)
 	        }
 	      }
@@ -1405,45 +1309,61 @@
 
 
 /***/ },
-/* 24 */
-/***/ function(module, exports, __webpack_require__) {
+/* 21 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const observer = __webpack_require__(7)
-	const exposed = __webpack_require__(12)
 	const secret = {
 	  template: Symbol('content template'),
-	  separators: Symbol('content separators')
+	  firstNodes: Symbol('first nodes')
 	}
+	let cloneId = 0
 
-	module.exports = function content (node, state) {
-	  if (!(node instanceof Element)) return
-	  node.$using('content')
+	function content (elem) {
+	  if (elem.nodeType !== 1) return
 
-	  node.$extractContent = $extractContent
-	  node.$insertContent = $insertContent
-	  node.$removeContent = $removeContent
-	  node.$replaceContent = $replaceContent
-	  node.$moveContent = $moveContent
-	  node.$mutateContext = $mutateContext
+	  elem.$extractContent = $extractContent
+	  elem.$insertContent = $insertContent
+	  elem.$moveContent = $moveContent
+	  elem.$removeContent = $removeContent
+	  elem.$clearContent = $clearContent
+	  elem.$mutateContext = $mutateContext
 	}
+	content.$name = 'content'
+	module.exports = content
 
 	function $extractContent () {
 	  const template = document.createDocumentFragment()
 	  let node = this.firstChild
 	  while (node) {
 	    template.appendChild(node)
+	    processContent(node)
 	    node = this.firstChild
 	  }
 	  this[secret.template] = template
-	  this[secret.separators] = []
+	  this[secret.firstNodes] = []
+	  return template
+	}
+
+	function processContent (node) {
+	  if (node.nodeType === 1) {
+	    node.setAttribute('clone-id', cloneId++)
+	    const childNodes = node.childNodes
+	    let i = childNodes.length
+	    while (i--) {
+	      processContent(childNodes[i])
+	    }
+	  } else if (node.nodeType === 3) {
+	    if (!node.nodeValue.trim()) node.remove()
+	  } else {
+	    node.remove()
+	  }
 	}
 
 	function $insertContent (index, contextState) {
-	  index = index || 0
-	  if (typeof index !== 'number') {
-	    throw new TypeError('first argument must be a number')
+	  if (index !== undefined && typeof index !== 'number') {
+	    throw new TypeError('first argument must be a number or undefined')
 	  }
 	  if (contextState !== undefined && typeof contextState !== 'object') {
 	    throw new TypeError('second argument must be an object or undefined')
@@ -1451,205 +1371,207 @@
 	  if (!this[secret.template]) {
 	    throw new Error('you must extract a template with $extractContent before inserting')
 	  }
-	  const content = document.importNode(this[secret.template], true)
-	  const separator = document.createComment('#separator#')
-	  content.appendChild(separator)
+	  const content = this[secret.template].cloneNode(true)
+	  const firstNodes = this[secret.firstNodes]
+	  const firstNode = content.firstChild
+	  const beforeNode = firstNodes[index]
 
 	  if (contextState) {
-	    //contextState = Object.assign(Object.create(this[exposed.state]), contextState)
-	    // it is important to keep it in this order!!
-	    contextState = observer.observable(contextState)
-	    Object.setPrototypeOf(contextState, this[exposed.state])
-
-	    let node = content.firstChild
+	    contextState = Object.assign(Object.create(this.$state), contextState)
+	    let node = firstNode
 	    while (node) {
-	      node[exposed.contextState] = contextState
+	      node.$contextState = contextState
 	      node = node.nextSibling
 	    }
 	  }
-	  this.insertBefore(content, findContentStartAtIndex(this, index))
-	  this[secret.separators].splice(index, 0, separator)
+
+	  this.insertBefore(content, beforeNode)
+	  if (beforeNode) firstNodes.splice(index, 0, firstNode)
+	  else firstNodes.push(firstNode)
 	}
 
 	function $removeContent (index) {
-	  index = index || 0
-	  if (typeof index !== 'number') {
-	    throw new TypeError('first argument must be a number')
+	  if (index !== undefined && typeof index !== 'number') {
+	    throw new TypeError('first argument must be a number or undefined')
 	  }
-	  if (!this[secret.template]) {
-	    throw new Error('you must extract a template with $extractContent before removing')
-	  }
-	  let node = findContentStartAtIndex(this, index)
+	  const firstNodes = this[secret.firstNodes]
+	  index = firstNodes[index] ? index : (firstNodes.length - 1)
+	  const firstNode = firstNodes[index]
+	  const nextNode = firstNodes[index + 1]
+
+
+	  let node = firstNode
 	  let next
-	  while (node && !isSeparator(node)) {
+	  while (node && node !== nextNode) {
 	    next = node.nextSibling
 	    node.remove()
 	    node = next
 	  }
-	  node.remove()
-	  this[secret.separators].splice(index, 1)
+
+	  if (nextNode) firstNodes.splice(index, 1)
+	  else firstNodes.pop()
 	}
 
-	function $replaceContent (index, contextState) {
-	  index = index || 0
-	  this.$removeContent(index)
-	  this.$insertContent(index, contextState)
+	function $clearContent () {
+	  this.innerHTML = ''
+	  this[secret.firstNodes] = []
 	}
 
-	function $moveContent (fromIndex, toIndex) {
-	  fromIndex = fromIndex || 0
-	  toIndex = toIndex || 0
-	  if (!this[secret.template]) {
-	    throw new Error('you must extract a template with $extractContent before removing')
+	function $moveContent (fromIndex, toIndex, extraContext) {
+	  if (typeof fromIndex !== 'number' || typeof toIndex !== 'number') {
+	    throw new Error('first and second argument must be numbers')
 	  }
-	  let fromNode = findContentStartAtIndex(this, fromIndex)
-
-	  let toNode = findContentStartAtIndex(this, toIndex)
-	  let fromNext
-	  while (fromNode && !isSeparator(fromNode)) {
-	    fromNext = fromNode.nextSibling
-	    this.insertBefore(fromNode, toNode)
-	    fromNode = fromNext
+	  if (extraContext !== undefined && typeof extraContext !== 'object') {
+	    throw new Error('third argument must be an object or undefined')
 	  }
-	  this.insertBefore(fromNode, toNode)
-	  const separators = this[secret.separators]
-	  separators.splice(toIndex, 0, separators.splice(fromIndex, 1)[0])
+	  const firstNodes = this[secret.firstNodes]
+	  const fromNode = firstNodes[fromIndex]
+	  const untilNode = firstNodes[fromIndex + 1]
+	  const toNode = firstNodes[toIndex]
 
-	  if (fromNode) {
-	    const contextState = fromNode[exposed.contextState]
-	    if (contextState) {
-	      contextState.$index = toIndex
-	    }
+	  let node = fromNode
+	  let next
+	  while (node && node !== untilNode) {
+	    next = node.nextSibling
+	    this.insertBefore(node, toNode)
+	    node = next
+	  }
+	  firstNodes.splice(fromIndex, 1)
+	  firstNodes.splice(toIndex, 0, fromNode)
+
+	  if (extraContext && fromNode && fromNode.$contextState) {
+	    Object.assign(fromNode.$contextState, extraContext)
 	  }
 	}
 
 	function $mutateContext (index, extraContext) {
-	  index = index || 0
-	  if (typeof index !== 'number') {
-	    throw new TypeError('first argument must be a number')
+	  if (index !== undefined && typeof index !== 'number') {
+	    throw new TypeError('first argument must be a number or undefined')
 	  }
 	  if (typeof extraContext !== 'object') {
 	    throw new TypeError('second argument must be an object')
 	  }
-	  const startNode = findContentStartAtIndex(this, index)
-	  if (startNode) {
-	    const contextState = startNode[exposed.contextState]
-	    if (contextState) {
-	      Object.assign(contextState, extraContext)
-	    }
+	  const startNode = this[secret.firstNodes][index]
+	  if (startNode && startNode.$contextState) {
+	    Object.assign(startNode.$contextState, extraContext)
 	  }
-	}
-
-	function findContentStartAtIndex (node, index) {
-	  index--
-	  const separators = node[secret.separators]
-	  if (index < 0) {
-	    return node.firstChild
-	  }
-	  if (separators[index]) {
-	    return separators[index].nextSibling
-	  }
-	}
-
-	function isSeparator (node) {
-	  return (node.nodeType === Node.COMMENT_NODE && node.nodeValue === '#separator#')
 	}
 
 
 /***/ },
-/* 25 */
+/* 22 */
 /***/ function(module, exports) {
 
 	'use strict'
 
 	const secret = {
 	  showing: Symbol('flow showing'),
-	  prevArray: Symbol('flow prevArray')
+	  prevArray: Symbol('flow prevArray'),
+	  hasIf: Symbol('has if'),
+	  hasRepeat: Symbol('has repeat')
 	}
 
-	module.exports = function flow (elem, state, next) {
-	  if (!(elem instanceof Element)) return
-	  elem.$require('content', 'attributes')
-	  elem.$using('flow')
+	function flow (elem) {
+	  if (elem.nodeType !== 1) return
 
-	  if (elem.$hasAttribute('if') && elem.hasAttribute('repeat')) {
-	    throw new Error('cant use if and repeat on the same node')
-	  }
-	  if (elem.$hasAttribute('if') || elem.$hasAttribute('repeat')) {
-	    elem.$extractContent()
-	  }
 	  elem.$attribute('if', ifAttribute)
 	  elem.$attribute('repeat', repeatAttribute)
 	}
+	flow.$name = 'flow'
+	flow.$require = ['content', 'attributes']
+	module.exports = flow
 
-	function ifAttribute (show, elem) {
-	  if (show && !elem[secret.showing]) {
-	    elem.$insertContent()
-	    elem[secret.showing] = true
-	  } else if (!show && elem[secret.showing]) {
-	    elem.$removeContent()
-	    elem[secret.showing] = false
+	function ifAttribute (show) {
+	  if (this[secret.hasRepeat]) {
+	    throw new Error('You cant use if and repeat on the same node')
+	  }
+	  if (!this[secret.hasIf]) {
+	    this.$extractContent()
+	    this[secret.hasIf] = true
+	  }
+
+	  if (show && !this[secret.showing]) {
+	    this.$insertContent()
+	    this[secret.showing] = true
+	  } else if (!show && this[secret.showing]) {
+	    this.$clearContent()
+	    this[secret.showing] = false
 	  }
 	}
 
-	function repeatAttribute (array, elem) {
-	  if (array === undefined) {
-	    return
+	function repeatAttribute (array) {
+	  if (this[secret.hasIf]) {
+	    throw new Error('You cant use if and repeat on the same node')
 	  }
-	  array = Array.from(array)
-	  elem[secret.prevArray] = elem[secret.prevArray] || []
-	  const prevArray = elem[secret.prevArray]
+	  if (!this[secret.hasRepeat]) {
+	    this.$extractContent()
+	    this[secret.hasRepeat] = true
+	  }
+	  const trackBy = this.getAttribute('track-by')
+	  const repeatValue = this.getAttribute('repeat-value') || '$value'
+	  const repeatIndex = this.getAttribute('repeat-index') || '$index'
 
-	  const repeatKey = elem.getAttribute('repeat-key')
-	  const repeatValue = elem.getAttribute('repeat-value') || '$value'
-	  const repeatIndex = elem.getAttribute('repeat-index') || '$index'
+	  array = array || []
+	  const prevArray = this[secret.prevArray] = this[secret.prevArray] || []
 
-	  for (let i = 0; i < array.length; i++) {
-	    const item = array[i]
-	    let found = false
+	  let i = -1
+	  iteration: for (let item of array) {
+	    let prevItem = prevArray[++i]
 
-	    for (let j = i; j < prevArray.length; j++) {
-	      const prevItem = prevArray[j]
-	      if (isSame(item, prevItem, repeatKey)) {
-	        if (i === j) {
-	          elem.$mutateContext(i, { [repeatIndex]: i })
-	        } else {
-	          prevArray.splice(i, 0, prevArray.splice(j, 1)[0])
-	          elem.$moveContent(j, i)
-	        }
-	        found = true
-	        break
+	    if (prevItem === undefined) {
+	      this.$insertContent(i, {[repeatIndex]: i, [repeatValue]: item})
+	      prevArray[i] = item
+	      continue
+	    }
+	    if (item === prevItem) {
+	      this.$mutateContext(i, {[repeatIndex]: i})
+	      continue
+	    }
+	    if (trackBy === repeatIndex) {
+	      this.$mutateContext(i, {[repeatValue]: item})
+	      prevArray[i] = item
+	      continue
+	    }
+	    if (trackBy && isTrackBySame(item, prevItem, trackBy)) {
+	      this.$mutateContext(i, {[repeatIndex]: i})
+	      continue
+	    }
+	    for (let j = i + 1; j < prevArray.length; j++) {
+	      prevItem = prevArray[j]
+	      if (item === prevItem || (trackBy && isTrackBySame(item, prevItem, trackBy))) {
+	        this.$moveContent(j, i, {[repeatIndex]: i})
+	        prevArray.splice(i, 0, prevItem)
+	        prevArray.splice(j, 1)
+	        continue iteration
 	      }
 	    }
-	    if (!found) {
-	      prevArray.splice(i, 0, item)
-	      elem.$insertContent(i, {[repeatValue]: array[i], [repeatIndex]: i})
-	    }
+	    this.$insertContent(i, {[repeatIndex]: i, [repeatValue]: item})
+	    prevArray.splice(i, 0, item)
 	  }
 
-	  while (array.length < prevArray.length) {
-	    prevArray.splice(array.length, 1)
-	    elem.$removeContent(array.length)
+	  if ((++i) === 0) {
+	    prevArray.length = 0
+	    this.$clearContent()
+	  } else {
+	    while (i < prevArray.length) {
+	      this.$removeContent()
+	      prevArray.pop()
+	    }
 	  }
 	}
 
-	function isSame (item1, item2, key) {
-	  if (item1 === item2) {
-	    return true
-	  }
-	  if (key && typeof item1 === 'object' && item1 !== null && typeof item2 === 'object' && item2 !== null) {
-	    return (item1[key] === item2[key])
-	  }
+	function isTrackBySame (item1, item2, trackBy) {
+	  return (typeof item1 === 'object' && typeof item2 === 'object' &&
+	  item1 && item2 && item1[trackBy] === item2[trackBy])
 	}
 
 
 /***/ },
-/* 26 */
-/***/ function(module, exports, __webpack_require__) {
+/* 23 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(12)
 	const secret = {
 	  params: Symbol('bindable params'),
 	  binder: Symbol('bindable binder')
@@ -1672,10 +1594,8 @@
 	  ev.preventDefault()
 	}
 
-	module.exports = function bindable (elem, state, next) {
-	  if (!(elem instanceof Element)) return
-	  elem.$require('attributes')
-	  elem.$using('bindable')
+	function bindable (elem, state, next) {
+	  if (elem.nodeType !== 1) return
 
 	  elem.$bindable = $bindable
 	  next()
@@ -1685,13 +1605,16 @@
 	    elem.$attribute('bind', bindAttribute)
 	  }
 	}
+	bindable.$name = 'bindable'
+	bindable.$require = ['observe', 'attributes']
+	module.exports = bindable
 
 	function $bindable (params) {
 	  if (typeof params !== 'object') params = {}
 	  this[secret.params] = Object.assign({}, defaultParams, params)
 	}
 
-	function bindAttribute (params, elem) {
+	function bindAttribute (params) {
 	  if (typeof params === 'string') {
 	    const tokens = params.match(paramsRegex)
 	    params = {}
@@ -1702,25 +1625,26 @@
 	    }
 	  }
 	  if (typeof params === 'object') {
-	    Object.assign(elem[secret.params], params)
+	    Object.assign(this[secret.params], params)
 	  }
-	  if (!Array.isArray(elem[secret.params].on)) {
-	    elem[secret.params].on = [elem[secret.params].on]
+	  if (!Array.isArray(this[secret.params].on)) {
+	    this[secret.params].on = [this[secret.params].on]
 	  }
-	  bindElement(elem)
+	  bindElement(this)
 	}
 
 	function bindElement (elem) {
 	  const params = elem[secret.params]
 	  const binder = elem[secret.binder]
+	  let signal
 	  if (params.mode === 'two-way') {
-	    elem.$observe(binder)
+	    signal = elem.$observe(binder)
 	    Promise.resolve().then(binder)
 	  } else if (params.mode === 'one-time') {
-	    elem.$unobserve(binder)
+	    elem.$unobserve(signal)
 	    Promise.resolve().then(binder)
 	  } else if (params.mode === 'one-way') {
-	    elem.$unobserve(binder)
+	    elem.$unobserve(signal)
 	  } else {
 	    throw new TypeError('bind mode must be two-way, one-time or one-way')
 	  }
@@ -1730,7 +1654,7 @@
 	}
 
 	function syncElementWithState (elem) {
-	  const state = elem[exposed.state]
+	  const state = elem.$state
 	  const params = elem[secret.params]
 	  const value = getValue(state, elem.name)
 	  if (elem.type === 'radio' || elem.type === 'checkbox') {
@@ -1741,7 +1665,7 @@
 	}
 
 	function syncStateWithElement (elem) {
-	  const state = elem[exposed.state]
+	  const state = elem.$state
 	  const params = elem[secret.params]
 	  if (elem.type === 'radio' || elem.type === 'checkbox') {
 	    const value = elem.checked ? toType(elem.value, params.type) : undefined
@@ -1800,15 +1724,13 @@
 
 
 /***/ },
-/* 27 */
+/* 24 */
 /***/ function(module, exports) {
 
 	'use strict'
 
-	module.exports = function bind (elem, state) {
+	function bind (elem) {
 	  if (!isInput(elem)) return
-	  elem.$require('bindable')
-	  elem.$isUsing('bind')
 
 	  elem.$bindable({
 	    mode: 'two-way',
@@ -1816,6 +1738,9 @@
 	    type: getType(elem)
 	  })
 	}
+	bind.$name = 'bind'
+	bind.$require = ['bindable']
+	module.exports = bind
 
 	function isInput (elem) {
 	  if (elem instanceof HTMLInputElement) return true
@@ -1851,56 +1776,50 @@
 
 
 /***/ },
-/* 28 */
+/* 25 */
 /***/ function(module, exports) {
 
 	'use strict'
 
-	const secret = {
-	  display: Symbol('style display')
-	}
-
-	module.exports = function style (elem, state) {
-	  if (!(elem instanceof HTMLElement)) return
-	  elem.$require('attributes')
-	  elem.$using('style')
+	function style (elem) {
+	  if (elem.nodeType !== 1) return
 
 	  elem.$attribute('class', classAttribute)
 	  elem.$attribute('style', styleAttribute)
 	}
+	style.$name = 'style'
+	style.$require = ['attributes']
+	module.exports = style
 
-	function classAttribute (classes, elem) {
+	function classAttribute (classes) {
 	  if (typeof classes === 'object') {
-	    const classList = []
-	    for (let className in classes) {
-	      if (classes[className]) {
-	        classList.push(className)
+	    for (var item in classes) {
+	      if (classes[item]) {
+	        this.classList.add(item)
+	      } else if (this.className) {
+	        this.classList.remove(item)
 	      }
 	    }
-	    classes = classList.join(' ')
+	  } else if (this.className !== classes) {
+	    this.className = classes
 	  }
-	  elem.setAttribute('class', classes)
 	}
 
-	function styleAttribute (styles, elem) {
+	function styleAttribute (styles) {
 	  if (typeof styles === 'object') {
-	    const styleList = []
-	    for (let styleName in styles) {
-	      styleList.push(`${styleName}: ${styles[styleName]};`)
-	    }
-	    styles = styleList.join(' ')
+	    Object.assign(this.style, styles)
+	  } else if (this.style.cssText !== styles) {
+	    this.style.cssText = styles
 	  }
-	  elem.setAttribute('style', styles)
 	}
 
 
 /***/ },
-/* 29 */
-/***/ function(module, exports, __webpack_require__) {
+/* 26 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(12)
 	const secret = {
 	  entering: Symbol('during entering animation'),
 	  leaving: Symbol('during leaving animation'),
@@ -1923,10 +1842,8 @@
 	  }
 	}
 
-	module.exports = function animate (elem, state) {
-	  if (!(elem instanceof Element)) return
-	  elem.$require('attributes')
-	  elem.$using('animate')
+	function animate (elem) {
+	  if (elem.nodeType !== 1) return
 
 	  elem.$attribute('enter-animation', enterAttribute)
 	  elem.$attribute('leave-animation', leaveAttribute)
@@ -1935,54 +1852,57 @@
 	  queueCheck()
 	  elem.$cleanup(queueCheck)
 	}
+	animate.$name = 'animate'
+	animate.$require = ['attributes']
+	module.exports = animate
 
-	function enterAttribute (animation, elem) {
-	  if (elem[secret.entering] !== false) {
-	    elem[secret.entering] = true
+	function enterAttribute (animation) {
+	  if (this[secret.entering] !== false) {
+	    this[secret.entering] = true
 	    if (typeof animation === 'object' && animation !== null) {
-	      elem.style.animation = animationObjectToString (animation)
+	      this.style.animation = animationObjectToString (animation)
 	    } else if (typeof animation === 'string') {
-	      elem.style.animation = animation
+	      this.style.animation = animation
 	    }
-	    setAnimationDefaults(elem)
+	    setAnimationDefaults(this)
 	  }
 	}
 
-	function leaveAttribute (animation, elem) {
-	  const parent = elem.parentNode
-	  watchedNodes.add(elem)
-	  elem.$cleanup(unwatch)
-	  elem.$cleanup(() => {
-	    elem[secret.leaving] = true
+	function leaveAttribute (animation) {
+	  const parent = this.parentNode
+	  watchedNodes.add(this)
+	  this.$cleanup(unwatch)
+	  this.$cleanup(() => {
+	    this[secret.leaving] = true
 	    if (typeof animation === 'object' && animation !== null) {
-	      elem.style.animation = animationObjectToString (animation)
+	      this.style.animation = animationObjectToString (animation)
 	    } else if (typeof animation === 'string') {
-	      elem.style.animation = animation
+	      this.style.animation = animation
 	    }
-	    setAnimationDefaults(elem)
-	    parent.appendChild(elem)
-	    if (shouldAbsolutePosition(elem)) {
-	      toAbsolutePosition(elem)
+	    setAnimationDefaults(this)
+	    parent.appendChild(this)
+	    if (shouldAbsolutePosition(this)) {
+	      toAbsolutePosition(this)
 	    }
 	  })
 	}
 
-	function moveAttribute (transition, elem) {
-	  elem[secret.moveTransition] = true
-	  watchedNodes.add(elem)
-	  elem.$cleanup(unwatch)
+	function moveAttribute (transition) {
+	  this[secret.moveTransition] = true
+	  watchedNodes.add(this)
+	  this.$cleanup(unwatch)
 	  if (typeof transition === 'object' && transition !== null) {
-	    elem.style.transition = transitionObjectToString(transition)
+	    this.style.transition = transitionObjectToString(transition)
 	  } else if (typeof transition === 'string') {
-	    elem.style.transition = 'transform ' + transition
+	    this.style.transition = 'transform ' + transition
 	  } else {
-	    elem.style.transition = 'transform'
+	    this.style.transition = 'transform'
 	  }
-	  setTransitionDefaults(elem)
+	  setTransitionDefaults(this)
 	}
 
-	function unwatch (elem) {
-	  watchedNodes.delete(elem)
+	function unwatch () {
+	  watchedNodes.delete(this)
 	}
 
 	function queueCheck () {
@@ -2065,7 +1985,7 @@
 	    if (elem[secret.leaving]) {
 	      return false
 	    }
-	    if (elem[exposed.root]) {
+	    if (elem.$root) {
 	      return true
 	    }
 	  }
@@ -2099,12 +2019,11 @@
 
 
 /***/ },
-/* 30 */
-/***/ function(module, exports, __webpack_require__) {
+/* 27 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const symbols = __webpack_require__(12)
 	const secret = {
 	  config: Symbol('router config')
 	}
@@ -2118,16 +2037,16 @@
 	  }
 	}
 
-	module.exports = function router (router, state) {
-	  if (!(router instanceof Element)) {
+	function router (router) {
+	  if (router.nodeType !== 1) {
 	    throw new Error('router only works with element nodes')
 	  }
-	  router.$using('router')
-
 	  setupRouter(router)
 	  extractViews(router)
 	  routeRouterAndChildren(router, absoluteToRelativeRoute(router, history.state.route))
 	}
+	router.$name = 'router'
+	module.exports = router
 
 	function setupRouter (router) {
 	  router[secret.config] = {
@@ -2136,18 +2055,18 @@
 	  }
 	  const parentRouter = findParentRouter(router)
 	  if (parentRouter) {
-	    router[symbols.routerLevel] = parentRouter[symbols.routerLevel] + 1
+	    router.$routerLevel = parentRouter.$routerLevel + 1
 	    parentRouter[secret.config].children.add(router)
 	    router.$cleanup(() => parentRouter[secret.config].children.delete(router))
 	  } else {
-	    router[symbols.routerLevel] = 1
+	    router.$routerLevel = 1
 	    rootRouters.add(router)
 	    router.$cleanup(() => rootRouters.delete(router))
 	  }
 	}
 
 	function absoluteToRelativeRoute (router, route) {
-	  return route.slice(router[symbols.routerLevel] - 1)
+	  return route.slice(router.$routerLevel - 1)
 	}
 
 	function extractViews (router) {
@@ -2167,7 +2086,7 @@
 	function findParentRouter (node) {
 	  while (node.parentNode) {
 	    node = node.parentNode
-	    if (node[symbols.routerLevel] !== undefined) {
+	    if (node.$routerLevel !== undefined) {
 	      return node
 	    }
 	  }
@@ -2177,7 +2096,7 @@
 	  route = route.slice()
 	  const templates = router[secret.config].templates
 	  const defaultView = router[secret.config].defaultView
-	  const prevView = router[symbols.currentView]
+	  const prevView = router.$currentView
 	  let nextView = route.shift()
 
 	  if (!templates.has(nextView) && templates.has(defaultView)) {
@@ -2197,7 +2116,7 @@
 
 	    if (!routeEvent.defaultPrevented) {
 	      routeRouter(router, nextView)
-	      router[symbols.currentView] = nextView
+	      router.$currentView = nextView
 	    }
 	  } else {
 	    routeChildren(router, route)
@@ -2223,12 +2142,11 @@
 
 
 /***/ },
-/* 31 */
-/***/ function(module, exports, __webpack_require__) {
+/* 28 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const exposed = __webpack_require__(12)
 	const secret = {
 	  config: Symbol('params sync config')
 	}
@@ -2239,7 +2157,7 @@
 	function onPopState (ev) {
 	  for (let node of nodesToSync) {
 	    if (document.body.contains(node)) { // TODO -> refine this a bit! I need a better check
-	      const state = node[exposed.state]
+	      const state = node.$state
 	      const config = node[secret.config]
 	      syncStateWithParams(state, history.state.params, config)
 	      syncParamsWithState(history.state.params, state, config, false)
@@ -2247,10 +2165,8 @@
 	  }
 	}
 
-	module.exports = function params (config) {
-	  return function paramsMiddleware (node, state, next) {
-	    node.$using('params')
-
+	module.exports = function paramsFactory (config) {
+	  function params (node, state, next) {
 	    node[secret.config] = config
 	    nodesToSync.add(node)
 	    node.$cleanup(() => nodesToSync.delete(node))
@@ -2262,6 +2178,9 @@
 	    syncParamsWithState(history.state.params, state, config, false)
 	    node.$observe(() => syncParamsWithState(history.state.params, state, config, true))
 	  }
+	  params.$name = 'params'
+	  params.$require = ['observe']
+	  return params
 	}
 
 	function syncStateWithParams (state, params, config) {
@@ -2342,52 +2261,49 @@
 
 
 /***/ },
-/* 32 */
-/***/ function(module, exports, __webpack_require__) {
+/* 29 */
+/***/ function(module, exports) {
 
 	'use strict'
 
-	const symbols = __webpack_require__(12)
 	const secret = {
 	  config: Symbol('ref config')
 	}
 
 	updateHistory(pathToRoute(location.pathname), queryToParams(location.search), {history: false})
 
-	module.exports = function ref (elem, state) {
-	  if (!(elem instanceof Element)) return
-	  elem.$require('attributes')
-	  elem.$using('ref')
+	function ref (elem) {
+	  if (elem.nodeType !== 1) return
 
 	  elem.$route = $route
-
 	  if (elem instanceof HTMLAnchorElement) {
 	    elem.$attribute('iref', irefAttribute)
 	    elem.$attribute('iref-params', irefParamsAttribute)
 	    elem.$attribute('iref-options', irefOptionsAttribute)
 	  }
 	}
+	ref.$name = 'ref'
+	ref.$require = ['attributes']
+	module.exports = ref
 
-	function irefAttribute (path, elem) {
-	  elem[secret.config] = elem[secret.config] || {}
-	  const config = elem[secret.config]
+	function irefAttribute (path) {
+	  this[secret.config] = this[secret.config] || {}
+	  const config = this[secret.config]
 	  config.path = path
 
-	  const href = path + (elem.search || '')
-	  elem.setAttribute('href', href)
-
-	  elem.addEventListener('click', onClick, true)
+	  const href = path + (this.search || '')
+	  this.setAttribute('href', href)
+	  this.addEventListener('click', onClick, true)
 	}
 
-	function irefParamsAttribute (params, elem) {
-	  elem[secret.config] = elem[secret.config] || {}
-	  const config = elem[secret.config]
+	function irefParamsAttribute (params) {
+	  this[secret.config] = this[secret.config] || {}
+	  const config = this[secret.config]
 	  config.params = params
 
-	  const href = (elem.pathname || '') + paramsToQuery(params)
-	  elem.setAttribute('href', href)
-
-	  elem.addEventListener('click', onClick, true)
+	  const href = (this.pathname || '') + paramsToQuery(params)
+	  this.setAttribute('href', href)
+	  this.addEventListener('click', onClick, true)
 	}
 
 	function onClick (ev) {
@@ -2398,9 +2314,9 @@
 	  }
 	}
 
-	function irefOptionsAttribute (options, elem) {
-	  elem[secret.config] = elem[secret.config] || {}
-	  elem[secret.config].options = options
+	function irefOptionsAttribute (options) {
+	  this[secret.config] = this[secret.config] || {}
+	  this[secret.config].options = options
 	}
 
 	function $route (path, params, options) {
@@ -2410,7 +2326,6 @@
 	  if (options === undefined) {
 	    options = {}
 	  }
-
 	  let route = pathToRoute(path)
 	  if (route.some(filterRelativeTokens)) {
 	    route = relativeToAbsoluteRoute(this, route)
@@ -2421,7 +2336,7 @@
 
 	function relativeToAbsoluteRoute (node, relativeRoute) {
 	  let router = findParentRouter(node)
-	  let routerLevel = router ? router[symbols.routerLevel] : 0
+	  let routerLevel = router ? router.$routerLevel : 0
 
 	  for (let token of relativeRoute) {
 	    if (token === '..') routerLevel--
@@ -2432,7 +2347,7 @@
 
 	  const currentRoute = []
 	  while (router) {
-	    currentRoute.unshift(router[symbols.currentView])
+	    currentRoute.unshift(router.$currentView)
 	    router = findParentRouter(router)
 	  }
 	  const route = relativeRoute.filter(filterAbsoluteTokens)
@@ -2454,7 +2369,7 @@
 	function findParentRouter (node) {
 	  while(node.parentNode) {
 	    node = node.parentNode
-	    if (node[symbols.routerLevel] !== undefined) {
+	    if (node.$routerLevel !== undefined) {
 	      return node
 	    }
 	  }
@@ -2525,26 +2440,287 @@
 
 
 /***/ },
+/* 30 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const observer = __webpack_require__(31)
+
+	function observe (node, state) {
+	  node.$contextState = observer.observable(node.$contextState)
+	  node.$state = observer.observable(node.$state)
+
+	  node.$observe = $observe
+	  node.$unobserve = observer.unobserve
+	}
+	observe.$name = 'observe'
+	module.exports = observe
+
+	function $observe (fn, ...args) {
+	  if (typeof fn !== 'function') {
+	    throw new TypeError('first argument must be a function')
+	  }
+	  args.unshift(fn, this)
+	  const signal = observer.observe.apply(null, args)
+	  this.$cleanup(observer.unobserve, signal)
+	  return signal
+	}
+
+
+/***/ },
+/* 31 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const nextTick = __webpack_require__(32)
+
+	const proxies = new WeakMap()
+	const observers = new WeakMap()
+	const queuedObservers = new Set()
+	let queued = false
+	let currentObserver
+
+	module.exports = {
+	  observe,
+	  unobserve,
+	  observable,
+	  isObservable
+	}
+
+	const handlers = {get, set, deleteProperty}
+
+	function observe (fn, context, ...args) {
+	  if (typeof fn !== 'function') {
+	    throw new TypeError('first argument must be a function')
+	  }
+	  args = args.length ? args : undefined
+	  const observer = {fn, context, args, observedKeys: []}
+	  runObserver(observer)
+	  return observer
+	}
+
+	function unobserve (observer) {
+	  if (typeof observer === 'object' && observer.observedKeys) {
+	    observer.observedKeys.forEach(unobserveKey, observer)
+	    observer.fn = observer.context = observer.args = observer.observedKeys = undefined
+	  }
+	}
+
+	function observable (obj) {
+	  obj = obj || {}
+	  if (typeof obj !== 'object') {
+	    throw new TypeError('first argument must be an object or undefined')
+	  }
+	  return proxies.get(obj) || toObservable(obj)
+	}
+
+	function toObservable (obj) {
+	  const observable = new Proxy(obj, handlers)
+	  proxies.set(obj, observable)
+	  proxies.set(observable, observable)
+	  observers.set(obj, new Map())
+	  return observable
+	}
+
+	function isObservable (obj) {
+	  if (typeof obj !== 'object') {
+	    throw new TypeError('first argument must be an object')
+	  }
+	  return (proxies.get(obj) === obj)
+	}
+
+	function get (target, key, receiver) {
+	  if (key === '$raw') return target
+	  const result = Reflect.get(target, key, receiver)
+	  if (typeof key === 'symbol' || typeof result === 'function') {
+	    return result
+	  }
+	  const isObject = (typeof result === 'object' && result !== null)
+	  const observable = isObject && proxies.get(result)
+	  if (currentObserver) {
+	    registerObserver(target, key, currentObserver)
+	    if (isObject && result.constructor !== Date) {
+	      return observable || toObservable(result)
+	    }
+	  }
+	  return observable || result
+	}
+
+	function registerObserver (target, key, observer) {
+	  const observersForTarget = observers.get(target)
+	  let observersForKey = observersForTarget.get(key)
+	  if (!observersForKey) {
+	    observersForKey = new Set()
+	    observersForTarget.set(key, observersForKey)
+	  }
+	  if (!observersForKey.has(observer)) {
+	    observersForKey.add(observer)
+	    observer.observedKeys.push(observersForKey)
+	  }
+	}
+
+	function set (target, key, value, receiver) {
+	  const observersForKey = observers.get(target).get(key)
+	  if (observersForKey) {
+	    observersForKey.forEach(queueObserver)
+	  }
+	  return Reflect.set(target, key, value, receiver)
+	}
+
+	function deleteProperty (target, key) {
+	  const observersForKey = observers.get(target).get(key)
+	  if (observersForKey) {
+	    observersForKey.forEach(queueObserver)
+	  }
+	  return Reflect.deleteProperty(target, key)
+	}
+
+	function queueObserver (observer) {
+	  if (!queued) {
+	    nextTick(runObservers)
+	    queued = true
+	  }
+	  queuedObservers.add(observer)
+	}
+
+	function runObservers () {
+	  queuedObservers.forEach(runObserver)
+	  queuedObservers.clear()
+	  queued = false
+	}
+
+	function runObserver (observer) {
+	  if (observer.fn) {
+	    try {
+	      currentObserver = observer
+	      observer.fn.apply(observer.context, observer.args)
+	    } finally {
+	      currentObserver = undefined
+	    }
+	  }
+	}
+
+	function unobserveKey (observersForKey) {
+	  observersForKey.delete(this)
+	}
+
+
+/***/ },
+/* 32 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	let mutateWithTask
+	let currTask
+
+	if (typeof MutationObserver !== 'undefined') {
+	  let counter = 0
+	  const observer = new MutationObserver(onTask)
+	  const textNode = document.createTextNode(String(counter))
+	  observer.observe(textNode, {characterData: true})
+
+	  function onTask () {
+	    if (currTask) {
+	      currTask()
+	    }
+	  }
+
+	  mutateWithTask = function mutateWithTask () {
+	    counter = (counter + 1) % 2
+	    textNode.textContent = counter
+	  }
+	}
+
+	module.exports = function nextTick (task) {
+	  currTask = task
+	  if (mutateWithTask) {
+	    mutateWithTask()
+	  } else {
+	    Promise.resolve().then(task)
+	  }
+	}
+
+
+/***/ },
 /* 33 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  capitalize: __webpack_require__(34),
-	  uppercase: __webpack_require__(35),
-	  lowercase: __webpack_require__(36),
-	  unit: __webpack_require__(37),
-	  json: __webpack_require__(38),
-	  slice: __webpack_require__(39),
-	  date: __webpack_require__(40),
-	  time: __webpack_require__(41),
-	  datetime: __webpack_require__(42)
+	  app: __webpack_require__(34),
+	  router: __webpack_require__(35)
 	}
 
 
 /***/ },
 /* 34 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const component = __webpack_require__(5)
+	const middlewares = __webpack_require__(13)
+
+	module.exports = function app (config) {
+	  config = Object.assign({root: true}, config)
+
+	  return component(config)
+	    .useOnContent(middlewares.observe)
+	    .useOnContent(middlewares.code)
+	    .useOnContent(middlewares.expression)
+	    .useOnContent(middlewares.interpolate)
+	    .useOnContent(middlewares.attributes)
+	    .useOnContent(middlewares.style)
+	    .useOnContent(middlewares.animate)
+	    .useOnContent(middlewares.ref)
+	    .useOnContent(middlewares.content)
+	    .useOnContent(middlewares.flow)
+	    .useOnContent(middlewares.bindable)
+	    .useOnContent(middlewares.bind)
+	    .useOnContent(middlewares.events)
+	}
+
+
+/***/ },
+/* 35 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const component = __webpack_require__(5)
+	const middlewares = __webpack_require__(13)
+
+	module.exports = function routerComp (config) {
+	  return component(config)
+	    .use(middlewares.router)
+	}
+
+
+/***/ },
+/* 36 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	module.exports = {
+	  capitalize: __webpack_require__(37),
+	  uppercase: __webpack_require__(38),
+	  lowercase: __webpack_require__(39),
+	  unit: __webpack_require__(40),
+	  json: __webpack_require__(41),
+	  slice: __webpack_require__(42),
+	  date: __webpack_require__(43),
+	  time: __webpack_require__(44),
+	  datetime: __webpack_require__(45)
+	}
+
+
+/***/ },
+/* 37 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2559,7 +2735,7 @@
 
 
 /***/ },
-/* 35 */
+/* 38 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2573,7 +2749,7 @@
 
 
 /***/ },
-/* 36 */
+/* 39 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2587,7 +2763,7 @@
 
 
 /***/ },
-/* 37 */
+/* 40 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2605,7 +2781,7 @@
 
 
 /***/ },
-/* 38 */
+/* 41 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2619,7 +2795,7 @@
 
 
 /***/ },
-/* 39 */
+/* 42 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2633,7 +2809,7 @@
 
 
 /***/ },
-/* 40 */
+/* 43 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2647,7 +2823,7 @@
 
 
 /***/ },
-/* 41 */
+/* 44 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2661,7 +2837,7 @@
 
 
 /***/ },
-/* 42 */
+/* 45 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2675,22 +2851,22 @@
 
 
 /***/ },
-/* 43 */
+/* 46 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  if: __webpack_require__(44),
-	  delay: __webpack_require__(45),
-	  debounce: __webpack_require__(46),
-	  throttle: __webpack_require__(47),
-	  key: __webpack_require__(48)
+	  if: __webpack_require__(47),
+	  delay: __webpack_require__(48),
+	  debounce: __webpack_require__(49),
+	  throttle: __webpack_require__(50),
+	  key: __webpack_require__(51)
 	}
 
 
 /***/ },
-/* 44 */
+/* 47 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2703,7 +2879,7 @@
 
 
 /***/ },
-/* 45 */
+/* 48 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2717,7 +2893,7 @@
 
 
 /***/ },
-/* 46 */
+/* 49 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2734,7 +2910,7 @@
 
 
 /***/ },
-/* 47 */
+/* 50 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2762,12 +2938,12 @@
 
 
 /***/ },
-/* 48 */
+/* 51 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const stringToCode = __webpack_require__(49)
+	const stringToCode = __webpack_require__(52)
 
 	module.exports = function keyLimiter (next, context, ...keys) {
 	  if (!(context.$event instanceof KeyboardEvent)) {
@@ -2783,7 +2959,7 @@
 
 
 /***/ },
-/* 49 */
+/* 52 */
 /***/ function(module, exports) {
 
 	// Source: http://jsfiddle.net/vWx8V/
@@ -2931,77 +3107,6 @@
 	// Add aliases
 	for (var alias in aliases) {
 	  codes[alias] = aliases[alias]
-	}
-
-
-/***/ },
-/* 50 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	module.exports = {
-	  app: __webpack_require__(51),
-	  router: __webpack_require__(52)
-	}
-
-
-/***/ },
-/* 51 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const core = __webpack_require__(5)
-	const middlewares = __webpack_require__(14)
-	const filters = __webpack_require__(33)
-	const limiters = __webpack_require__(43)
-
-	module.exports = function app (config) {
-	  config = Object.assign({root: true}, config)
-
-	  return core.component(config)
-	    .useOnContent(middlewares.code)
-	    .useOnContent(middlewares.expression)
-	    .useOnContent(middlewares.events)
-	    .useOnContent(middlewares.interpolate)
-	    .useOnContent(middlewares.attributes)
-	    .useOnContent(middlewares.style)
-	    .useOnContent(middlewares.animate)
-	    .useOnContent(middlewares.ref)
-	    .useOnContent(middlewares.content)
-	    .useOnContent(middlewares.flow)
-	    .useOnContent(middlewares.bindable)
-	    .useOnContent(middlewares.bind)
-	    .useOnContent(middlewares.filter('capitalize', filters.capitalize))
-	    .useOnContent(middlewares.filter('lowercase', filters.lowercase))
-	    .useOnContent(middlewares.filter('uppercase', filters.uppercase))
-	    .useOnContent(middlewares.filter('unit', filters.unit))
-	    .useOnContent(middlewares.filter('slice', filters.slice))
-	    .useOnContent(middlewares.filter('json', filters.json))
-	    .useOnContent(middlewares.filter('date', filters.date))
-	    .useOnContent(middlewares.filter('time', filters.time))
-	    .useOnContent(middlewares.filter('datetime', filters.datetime))
-	    .useOnContent(middlewares.limiter('if', limiters.if))
-	    .useOnContent(middlewares.limiter('delay', limiters.delay))
-	    .useOnContent(middlewares.limiter('debounce', limiters.debounce))
-	    .useOnContent(middlewares.limiter('throttle', limiters.throttle))
-	    .useOnContent(middlewares.limiter('key', limiters.key))
-	}
-
-
-/***/ },
-/* 52 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const core = __webpack_require__(5)
-	const middlewares = __webpack_require__(14)
-
-	module.exports = function routerComp (config) {
-	  return core.component(config)
-	    .use(middlewares.router)
 	}
 
 
@@ -3716,9 +3821,11 @@
 	    template: __webpack_require__(58),
 	    style: __webpack_require__(59)
 	  }))
-	  .useOnContent(nx.middlewares.filter('host', hostFilter))
-	  .useOnContent(nx.middlewares.filter('timeAgo', timeAgoFilter))
 	  .register('hacker-news')
+
+	// register two custom filters, that can be used inside expressions
+	nx.middlewares.expression.filter('host', hostFilter)
+	nx.middlewares.expression.filter('timeAgo', timeAgoFilter)
 
 	// this is a custom filter, that can be used in the view as 'value | host'
 	function hostFilter (url) {
@@ -3837,7 +3944,7 @@
 /* 65 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"stories\" repeat-value=\"story\" repeat-key=\"id\">\n  <story-item $story=\"story\"\n    enter-animation=\"fadeIn .6s .3s\"\n    move-animation=\".6s .3s\"\n    leave-animation=\"fadeOut .6s\">\n  </story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"stories\" repeat-value=\"story\" track-by=\"id\">\n  <story-item $story=\"story\"\n    enter-animation=\"fadeIn .6s .3s\"\n    move-animation=\".6s .3s\"\n    leave-animation=\"fadeOut .6s\">\n  </story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
 
 /***/ },
 /* 66 */

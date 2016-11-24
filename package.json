@@ -1,6 +1,6 @@
 {
   "name": "hacker-news",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "NX implementation of Hacker News",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@risingstack/nx-framework": "^1.0.0-alpha.3.0.1",
+    "@risingstack/nx-framework": "^1.0.0-alpha.4.0.0",
     "@risingstack/nx-seo": "^1.0.3",
     "compression": "^1.6.2",
     "events": "^1.1.1",

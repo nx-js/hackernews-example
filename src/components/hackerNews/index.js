@@ -11,9 +11,11 @@ nx.components.app()
     template: require('./view.html'),
     style: require('./style.less')
   }))
-  .useOnContent(nx.middlewares.filter('host', hostFilter))
-  .useOnContent(nx.middlewares.filter('timeAgo', timeAgoFilter))
   .register('hacker-news')
+
+// register two custom filters, that can be used inside expressions
+nx.middlewares.expression.filter('host', hostFilter)
+nx.middlewares.expression.filter('timeAgo', timeAgoFilter)
 
 // this is a custom filter, that can be used in the view as 'value | host'
 function hostFilter (url) {
