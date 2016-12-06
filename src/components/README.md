@@ -8,9 +8,10 @@ Components can be extended with functionality by passing middleware functions to
 with the simple `function middleware (elem, state, next) {}` syntax.
 
 I named the folders as the name of component for easier readability.
-Component folders may also include a view.html and style.less file.
+Component folders may also include a view.html and style.css file.
 They are linked together by the `nx.middlewares.render` middleware and can define
-external HTML and style.
+external HTML and style. Styles are scoped to the component by default and they can not
+leak out of the component.
 
 None of the above structuring and naming pattern is mandatory for NX. I just chose to follow
 these conventions for this project.

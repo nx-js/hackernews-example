@@ -4,13 +4,13 @@
 <!-- '#' prefix means event handling code -->
 <div @if="comment && !comment.deleted && !comment.dead && comment.text">
   <div enter-animation="fadeIn .6s">
-    <div class="comment-header light">
+    <div class="header light">
       <a iref="../user" $iref-params="{id: comment.by}">${comment.by}</a>
       <a iref="../story" $iref-params="{id: comment.id}">${comment.time | timeAgo} ago</a>
       <a #click="hidden = !hidden">@{hidden ? '[+]' : '[-]'}</a>
     </div>
     <div @hidden>
-      <dynamic-html $content="comment.text" class="comment-body"></dynamic-html>
+      <dynamic-html $content="comment.text" class="body"></dynamic-html>
       <ul $repeat="comment.kids" repeat-value="childCommentId">
         <li is="comment-item" $comment-id="childCommentId"></li>
       </ul>

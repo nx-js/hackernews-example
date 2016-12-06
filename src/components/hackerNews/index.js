@@ -9,7 +9,7 @@ const urlParser = document.createElement('a')
 nx.components.app()
   .use(nx.middlewares.render({
     template: require('./view.html'),
-    style: require('./style.less')
+    style: require('./style.css')
   }))
   .register('hacker-news')
 

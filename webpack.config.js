@@ -10,8 +10,7 @@ module.exports = {
   module: {
     loaders: [
       {test: /\.html$/, loader: 'raw'},
-      {test: /\.css$/, loader: 'raw'},
-      {test: /\.less$/, loader: 'raw!less'}
+      {test: /\.css$/, loader: 'raw'}
     ]
   }
 }

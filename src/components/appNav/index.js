@@ -10,6 +10,6 @@ nx.component({element: 'nav'})
   }))
   .use(nx.middlewares.render({
     template: require('./view.html'),
-    style: require('./style.less')
+    style: require('./style.css')
   }))
   .register('app-nav')

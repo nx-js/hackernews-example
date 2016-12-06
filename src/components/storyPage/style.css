@@ -1,0 +1,9 @@
+:host {
+  display: block;
+  padding: 10px;
+}
+
+.body {
+  display: block;
+  margin: 20px 0;
+}

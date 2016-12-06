@@ -12,7 +12,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@risingstack/nx-framework": "^1.0.0-alpha.4.0.0",
+    "@risingstack/nx-framework": "^1.0.0-alpha.5.0.0",
     "@risingstack/nx-seo": "^1.0.3",
     "compression": "^1.6.2",
     "events": "^1.1.1",
@@ -20,11 +20,8 @@
     "firebase": "^2.4.2"
   },
   "devDependencies": {
-    "css-loader": "^0.25.0",
-    "less": "^2.7.1",
-    "less-loader": "^2.2.3",
     "raw-loader": "^0.5.1",
-    "style-loader": "^0.13.1",
+    "css-loader": "^0.25.0",
     "webpack": "^1.13.1",
     "uglify-js": "git://github.com/mishoo/UglifyJS2#harmony"
   }

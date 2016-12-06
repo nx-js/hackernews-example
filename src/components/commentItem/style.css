@@ -1,0 +1,13 @@
+:host {
+  margin: 20px 0;
+  font-size: 9pt;
+  list-style-type: none;
+}
+
+.header {
+  margin-bottom: 5px;
+}
+
+.body a {
+  text-decoration: underline;
+}

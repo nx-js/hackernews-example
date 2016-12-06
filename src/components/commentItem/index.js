@@ -7,7 +7,7 @@
 nx.component({element: 'li'})
   .use(nx.middlewares.render({
     template: require('./view.html'),
-    style: require('./style.less')
+    style: require('./style.css')
   }))
   .use(setup)
   .register('comment-item')

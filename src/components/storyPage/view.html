@@ -3,7 +3,7 @@
 <div @if="story">
   <div enter-animation="fadeIn .6s .3s">
     <story-item $story></story-item>
-    <dynamic-html $content="story.text" class="story-text"></dynamic-html>
+    <dynamic-html $content="story.text" class="body"></dynamic-html>
     <lu $repeat="story.kids" repeat-value="commentId">
       <li is="comment-item" $comment-id="commentId"></li>
     </lu>

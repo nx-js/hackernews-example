@@ -50,74 +50,62 @@
 	__webpack_require__(1)
 
 	// this exposes a global store object, that can be used to access Hacker News data
-	__webpack_require__(53)
+	__webpack_require__(52)
 
 	// this registers the NX components to be used in HTML by their name
-	__webpack_require__(56)
+	__webpack_require__(55)
 
 
 /***/ },
 /* 1 */
 /***/ function(module, exports, __webpack_require__) {
 
-	/* WEBPACK VAR INJECTION */(function(module) {'use strict'
+	'use strict'
 
-	__webpack_require__(3)
+	var nx
 
-	const nx = {
-	  component: __webpack_require__(5),
-	  middlewares: __webpack_require__(13),
-	  components: __webpack_require__(33),
-	  filters: __webpack_require__(36),
-	  limiters: __webpack_require__(46),
-	  observer: __webpack_require__(31),
-	  compiler: __webpack_require__(16)
+	if (typeof Proxy === 'undefined') {
+	  nx = { supported: false }
+	} else {
+	  __webpack_require__(2)
+
+	  nx = {
+	    component: __webpack_require__(4),
+	    middlewares: __webpack_require__(12),
+	    components: __webpack_require__(32),
+	    filters: __webpack_require__(35),
+	    limiters: __webpack_require__(45),
+	    observer: __webpack_require__(30),
+	    compiler: __webpack_require__(15),
+	    supported: true
+	  }
+	  for (let name in nx.filters) {
+	    nx.middlewares.expression.filter(name, nx.filters[name])
+	  }
+	  for (let name in nx.limiters) {
+	    nx.middlewares.code.limiter(name, nx.limiters[name])
+	  }
 	}
 
-	for (let name in nx.filters) {
-	  nx.middlewares.expression.filter(name, nx.filters[name])
-	}
-
-	for (let name in nx.limiters) {
-	  nx.middlewares.code.limiter(name, nx.limiters[name])
-	}
-
-	if (module && module.exports) {
+	if (typeof module !== 'undefined' && module.exports) {
 	  module.exports = nx
 	}
-	if (window) {
+	if (typeof window !== 'undefined') {
 	  window.nx = nx
 	}
 
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)(module)))
 
 /***/ },
 /* 2 */
-/***/ function(module, exports) {
-
-	module.exports = function(module) {
-		if(!module.webpackPolyfill) {
-			module.deprecate = function() {};
-			module.paths = [];
-			// module.parent = undefined by default
-			module.children = [];
-			module.webpackPolyfill = 1;
-		}
-		return module;
-	}
-
-
-/***/ },
-/* 3 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	__webpack_require__(4)
+	__webpack_require__(3)
 
 
 /***/ },
-/* 4 */
+/* 3 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -193,31 +181,30 @@
 
 
 /***/ },
+/* 4 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	module.exports = __webpack_require__(5)
+
+
+/***/ },
 /* 5 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	module.exports = __webpack_require__(6)
-
-
-/***/ },
-/* 6 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict'
-
-	const validateConfig = __webpack_require__(7)
-	const validateMiddlewares = __webpack_require__(8)
-	const getContext = __webpack_require__(9)
-	const onNodeAdded = __webpack_require__(10)
-	const onNodeRemoved = __webpack_require__(12)
+	const validateConfig = __webpack_require__(6)
+	const validateMiddlewares = __webpack_require__(7)
+	const getContext = __webpack_require__(8)
+	const onNodeAdded = __webpack_require__(9)
+	const onNodeRemoved = __webpack_require__(11)
 
 	const secret = {
-	  config: Symbol('component config'),
-	  contentWatcher: Symbol('content watcher')
+	  config: Symbol('component config')
 	}
-	const contentWatcherConfig = {
+	const observerConfig = {
 	  childList: true,
 	  subtree: true
 	}
@@ -244,7 +231,7 @@
 	  }
 	  const config = this[secret.config]
 	  if (config.isolate === true) {
-	    throw new Error('content middlewares can not be added to isolated components')
+	    console.log('warning: content middlewares have no effect inside isolated components')
 	  }
 	  config.contentMiddlewares = config.contentMiddlewares || []
 	  config.contentMiddlewares.push(contentMiddleware)
@@ -287,27 +274,22 @@
 
 	    if (config.root) {
 	      this.$root = true
-	      this[secret.contentWatcher] = new MutationObserver(onMutations)
-	      this[secret.contentWatcher].observe(this, contentWatcherConfig)
-	      onNodeAdded(this, getContext(this.parentNode))
-	    } else {
-	      if (addedNodes.size === 0) {
-	        Promise.resolve().then(processAddedNodes)
-	      }
-	      addedNodes.add(this)
+	      const contentObserver = new MutationObserver(onMutations)
+	      contentObserver.observe(this, observerConfig)
 	    }
+
+	    if (addedNodes.size === 0) {
+	      Promise.resolve().then(processAddedNodes)
+	    }
+	    addedNodes.add(this)
 	  }
 	}
 
 	function detachedCallback () {
-	  const contentWatcher = this[secret.contentWatcher]
-	  if (contentWatcher) {
-	    contentWatcher.disconnect()
-	  }
 	  onNodeRemoved(this)
 	}
 
-	function onMutations (mutations, contentWatcher) {
+	function onMutations (mutations) {
 	  let mutationIndex = mutations.length
 	  while (mutationIndex--) {
 	    const mutation = mutations[mutationIndex]
@@ -333,17 +315,21 @@
 	}
 
 	function processAddedNode (node) {
-	  const parentNode = node.parentNode
+	  const parentNode = node.parentNode || node.host
 	  if (this.parent !== parentNode) {
 	    this.parent = parentNode
 	    this.context = getContext(parentNode)
 	  }
 	  onNodeAdded(node, this.context)
+	  if (node.shadowRoot) {
+	    const shadowObserver = new MutationObserver(onMutations)
+	    shadowObserver.observe(node.shadowRoot, observerConfig)
+	  }
 	}
 
 
 /***/ },
-/* 7 */
+/* 6 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -360,7 +346,7 @@
 
 	  if (typeof rawConfig.state === 'boolean' || rawConfig.state === 'inherit') {
 	    resultConfig.state = rawConfig.state
-	  } else if (typeof rawConfig.state === 'object' && observer.isObservable(rawConfig.state)) {
+	  } else if (typeof rawConfig.state === 'object') {
 	    resultConfig.state = rawConfig.state
 	  } else if (rawConfig.state === undefined) {
 	    resultConfig.state = true
@@ -384,7 +370,7 @@
 	    throw new Error('invalid root config: ' + rawConfig.root)
 	  }
 
-	  if (resultConfig.root && (resultConfig.isolate || !resultConfig.state)) {
+	  if (resultConfig.root && (resultConfig.isolate === true || !resultConfig.state)) {
 	    throw new Error('root components must have a state and must not be isolated')
 	  }
 
@@ -403,7 +389,7 @@
 
 
 /***/ },
-/* 8 */
+/* 7 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -453,7 +439,7 @@
 
 
 /***/ },
-/* 9 */
+/* 8 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -477,20 +463,20 @@
 	    if (node.$root) {
 	      return context
 	    }
-	    node = node.parentNode
+	    node = node.parentNode || node.host
 	  }
 	  return context
 	}
 
 
 /***/ },
-/* 10 */
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const validateMiddlewares = __webpack_require__(8)
-	const runMiddlewares = __webpack_require__(11)
+	const validateMiddlewares = __webpack_require__(7)
+	const runMiddlewares = __webpack_require__(10)
 
 	module.exports = function onNodeAdded (node, context) {
 	  const parent = node.parentNode
@@ -532,6 +518,12 @@
 	      setupNodeAndChildren(child, node.$state, contentMiddlewares)
 	      child = child.nextSibling
 	    }
+
+	    child = node.shadowRoot ? node.shadowRoot.firstChild : undefined
+	    while (child) {
+	      setupNodeAndChildren(child, node.$state, contentMiddlewares)
+	      child = child.nextSibling
+	    }
 	  }
 	}
 
@@ -557,7 +549,7 @@
 
 
 /***/ },
-/* 11 */
+/* 10 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -589,7 +581,7 @@
 
 
 /***/ },
-/* 12 */
+/* 11 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -615,6 +607,12 @@
 	    cleanupNodeAndChildren(child)
 	    child = child.nextSibling
 	  }
+
+	  child = node.shadowRoot ? node.shadowRoot.firstChild : undefined
+	  while (child) {
+	    cleanupNodeAndChildren(child, node.$state, contentMiddlewares)
+	    child = child.nextSibling
+	  }
 	}
 
 	function runCleaner (cleaner) {
@@ -623,33 +621,33 @@
 
 
 /***/ },
-/* 13 */
+/* 12 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  attributes: __webpack_require__(14),
-	  code: __webpack_require__(15),
-	  expression: __webpack_require__(17),
-	  events: __webpack_require__(18),
-	  interpolate: __webpack_require__(19),
-	  render: __webpack_require__(20),
-	  content: __webpack_require__(21),
-	  flow: __webpack_require__(22),
-	  bindable: __webpack_require__(23),
-	  bind: __webpack_require__(24),
-	  style: __webpack_require__(25),
-	  animate: __webpack_require__(26),
-	  router: __webpack_require__(27),
-	  params: __webpack_require__(28),
-	  ref: __webpack_require__(29),
-	  observe: __webpack_require__(30)
+	  attributes: __webpack_require__(13),
+	  code: __webpack_require__(14),
+	  expression: __webpack_require__(16),
+	  events: __webpack_require__(17),
+	  interpolate: __webpack_require__(18),
+	  render: __webpack_require__(19),
+	  content: __webpack_require__(20),
+	  flow: __webpack_require__(21),
+	  bindable: __webpack_require__(22),
+	  bind: __webpack_require__(23),
+	  style: __webpack_require__(24),
+	  animate: __webpack_require__(25),
+	  router: __webpack_require__(26),
+	  params: __webpack_require__(27),
+	  ref: __webpack_require__(28),
+	  observe: __webpack_require__(29)
 	}
 
 
 /***/ },
-/* 14 */
+/* 13 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -703,7 +701,7 @@
 	    const type = attr.name[0]
 
 	    if (type === '@') {
-	      attr.$name = attr.$name || (attr.name.slice(0, 6) === '@data-' ? attr.name.slice(6) : attr.name.slice(1))
+	      attr.$name = attr.$name || attr.name.slice(1)
 	      attr.$expression = attr.$expression || elem.$compileExpression(attr.value || attr.$name)
 	      const handler = handlers.get(attr.$name) || defaultHandler
 	      elem.$observe(expressionHandler, attr, handler)
@@ -711,17 +709,16 @@
 	    }
 
 	    if (type === '$') {
-	      attr.$name = attr.$name || (attr.name.slice(0, 6) === '$data-' ? attr.name.slice(6) : attr.name.slice(1))
+	      attr.$name = attr.$name || attr.name.slice(1)
 	      attr.$expression = attr.$expression || elem.$compileExpression(attr.value || attr.$name)
 	      const handler = handlers.get(attr.$name) || defaultHandler
 	      expressionHandler.call(elem, attr, handler)
 	      continue
 	    }
 
-	    attr.$name = attr.$name || (attr.name.slice(0, 5) === 'data-' ? attr.name.slice(5) : attr.name)
-	    const handler = handlers.get(attr.$name)
+	    const handler = handlers.get(attr.name)
 	    if (handler) {
-	      handler.call(elem, attr.value, attr.$name)
+	      handler.call(elem, attr.value, attr.name)
 	    }
 	  }
 	}
@@ -741,12 +738,12 @@
 
 
 /***/ },
-/* 15 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(16)
+	const compiler = __webpack_require__(15)
 
 	const limiterRegex = /(?:[^\&]|\&\&)+/g
 	const argsRegex = /\S+/g
@@ -837,7 +834,7 @@
 
 
 /***/ },
-/* 16 */
+/* 15 */
 /***/ function(module, exports) {
 
 	/* WEBPACK VAR INJECTION */(function(global) {'use strict'
@@ -924,12 +921,12 @@
 	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
 
 /***/ },
-/* 17 */
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(16)
+	const compiler = __webpack_require__(15)
 
 	const filterRegex = /(?:[^\|]|\|\|)+/g
 	const argsRegex = /\S+/g
@@ -1013,7 +1010,7 @@
 
 
 /***/ },
-/* 18 */
+/* 17 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1026,7 +1023,12 @@
 
 	function events (elem) {
 	  if (elem.nodeType !== 1) return
-	  elem[secret.handlers] = getEventHandlers(elem)
+
+	  const handlers = getEventHandlers(elem)
+	  if (handlers) {
+	    handlers.forEach(addEventHandlers, elem)
+	    elem[secret.handlers] = handlers
+	  }
 	}
 	events.$name = 'events'
 	events.$require = ['code']
@@ -1062,41 +1064,26 @@
 	          handlers.set(name, typeHandlers)
 	        }
 	        typeHandlers.add(handler)
-	        if (!handledEvents.has(name)) {
-	          document.addEventListener(name, listener, true)
-	          handledEvents.add(name)
-	        }
 	      }
 	    }
 	  }
 	  return handlers
 	}
 
-	function listener (event) {
-	  const type = event.type
-	  let elem = event.target
-	  while (elem) {
-	    runHandler(elem, event, type)
-	    if (elem.$root) return
-	    elem = elem.parentNode
-	  }
+	function addEventHandlers (handlers, type) {
+	  this.addEventListener(type, listener, true)
 	}
 
-	function runHandler (elem, event, type) {
-	  const handlers = elem[secret.handlers]
-	  if (handlers) {
-	    const typeHandlers = handlers.get(type)
-	    if (typeHandlers) {
-	      for (let handler of typeHandlers) {
-	        handler(elem.$contextState, { $event: event })
-	      }
-	    }
+	function listener (ev) {
+	  const handlers = this[secret.handlers].get(ev.type)
+	  for (let handler of handlers) {
+	    handler(this.$contextState, { $event: ev })
 	  }
 	}
 
 
 /***/ },
-/* 19 */
+/* 18 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1201,80 +1188,128 @@
 
 
 /***/ },
-/* 20 */
+/* 19 */
 /***/ function(module, exports) {
 
 	'use strict'
 
+	let selectorScope
+	const hostRegex = /:host/g
+	const functionalHostRegex = /:host\((.*?)\)/g
+
 	module.exports = function renderFactory (config) {
 	  config = validateAndCloneConfig(config)
-	  if (config.cache) {
-	    config.template = cacheTemplate(config.template)
-	  }
-	  if (config.style) {
-	    const style = document.createTextNode(config.style)
-	    const styleContainer = document.createElement('style')
-	    styleContainer.appendChild(style)
-	    document.head.appendChild(styleContainer)
-	  }
+	  config.template = cacheTemplate(config.template)
 
 	  function render (elem) {
 	    if (elem.nodeType !== 1) {
 	      throw new Error('render only works with element nodes')
 	    }
+	    addContext(elem)
 
-	    let template
-	    if (config.cache) {
-	      template = document.importNode(config.template, true)
+	    const template = document.importNode(config.template, true)
+
+	    // fall back to non shadow mode (scoped style) for now, add polyfill later
+	    if (config.shadow && elem.attachShadow) {
+	      const shadowRoot = elem.attachShadow({mode: 'open'})
+	      shadowRoot.appendChild(template)
+	      const style = document.createElement('style')
+	      style.appendChild(document.createTextNode(config.style))
+	      shadowRoot.appendChild(style)
 	    } else {
-	      template = cacheTemplate(config.template)
+	      composeContentWithTemplate(elem, template)
+	      if (config.style) {
+	        addScopedStyle(elem, config.style)
+	        config.style = undefined
+	      }
 	    }
-	    composeContentWithTemplate(elem, template)
-	    elem.appendChild(template)
 	  }
+
 	  render.$name = 'render'
 	  return render
 	}
 
+	function addContext (elem) {
+	  let child = elem.firstChild
+	  while (child) {
+	    child.$contextState = elem.$contextState
+	    child = child.nextSibling
+	  }
+	}
+
 	function composeContentWithTemplate (elem, template) {
 	  let defaultSlot
+	  const slots = template.querySelectorAll('slot')
 
-	  Array.prototype.forEach.call(template.querySelectorAll('slot'), (slot) => {
+	  for (let i = slots.length; i--;) {
+	    const slot = slots[i]
 	    if (slot.getAttribute('name')) {
 	      const slotFillers = elem.querySelectorAll(`[slot=${slot.getAttribute('name')}]`)
 	      if (slotFillers.length) {
-	        clearContent(slot)
-	        for (let i = 0; i < slotFillers.length; i++) {
-	          const slotFiller = slotFillers[i]
-	          slotFiller.$contextState = elem.$contextState
-	          slot.appendChild(slotFiller)
+	        slot.innerHTML = ''
+	        for (let i = slotFillers.length; i--;) {
+	          slot.appendChild(slotFillers[i])
 	        }
 	      }
-	    } else if (slot.hasAttribute('name')) {
+	    } else {
 	      defaultSlot = slot
 	    }
-	  })
+	  }
 
-	  if (defaultSlot && elem.childNodes.length) {
-	    clearContent(defaultSlot)
+	  if (defaultSlot && elem.firstChild) {
+	    defaultSlot.innerHTML = ''
 	    while (elem.firstChild) {
-	      elem.firstChild[exposed.contextState] = elem[exposed.contextState]
 	      defaultSlot.appendChild(elem.firstChild)
 	    }
 	  }
-	  clearContent(elem)
+	  elem.innerHTML = ''
+	  elem.appendChild(template)
 	}
 
-	function cacheTemplate (template) {
-	  const cachedTemplate = document.createElement('template')
-	  cachedTemplate.innerHTML = template
-	  return cachedTemplate.content
+	function addScopedStyle (elem, styleString) {
+	  setSelectorScope(elem)
+	  styleString = styleString
+	    .replace(functionalHostRegex, `${selectorScope}$1`)
+	    .replace(hostRegex, selectorScope)
+
+	  const style = document.createElement('style')
+	  style.appendChild(document.createTextNode(styleString))
+	  document.head.insertBefore(style, document.head.firstChild)
+
+	  scopeSheet(style.sheet)
 	}
 
-	function clearContent (elem) {
-	  while (elem.firstChild) {
-	    elem.firstChild.remove()
+	function setSelectorScope (elem) {
+	  const is = elem.getAttribute('is')
+	  selectorScope = (is ? `${elem.tagName}[is="${is}"]` : elem.tagName).toLowerCase()
+	}
+
+	function scopeSheet (sheet) {
+	  const rules = sheet.cssRules
+	  for (let i = rules.length; i--;) {
+	    const rule = rules[i]
+	    if (rule.type === 1) {
+	      const selectorText = rule.selectorText.split(',').map(scopeSelector).join(', ')
+	      const styleText = rule.style.cssText
+	      sheet.deleteRule(i)
+	      sheet.insertRule(`${selectorText} { ${styleText} }`, i)
+	    } else if (rule.type === 4) { // media rules
+	      scopeSheet(rule)
+	    }
 	  }
+	}
+
+	function scopeSelector (selector) {
+	  if (selector.indexOf(selectorScope) !== -1) {
+	    return selector
+	  }
+	  return `${selectorScope} ${selector}`
+	}
+
+	function cacheTemplate (templateHTML) {
+	  const templateDOM = document.createElement('template')
+	  templateDOM.innerHTML = templateHTML
+	  return templateDOM.content
 	}
 
 	function validateAndCloneConfig (rawConfig) {
@@ -1293,15 +1328,13 @@
 	  if (typeof rawConfig.style === 'string') {
 	    resultConfig.style = rawConfig.style
 	  } else if (rawConfig.style !== undefined) {
-	    throw new TypeError('template config must be a string or undefined')
+	    throw new TypeError('style config must be a string or undefined')
 	  }
 
-	  if (typeof rawConfig.cache === 'boolean') {
-	    resultConfig.cache = rawConfig.cache
-	  } else if (rawConfig.cache === undefined) {
-	    resultConfig.cache = true
-	  } else {
-	    throw new TypeError('cache config must be a boolean or undefined')
+	  if (typeof rawConfig.shadow === 'boolean') {
+	    resultConfig.shadow = rawConfig.shadow
+	  } else if (rawConfig.shadow !== undefined) {
+	    throw new TypeError('shadow config must be a boolean or undefined')
 	  }
 
 	  return resultConfig
@@ -1309,7 +1342,7 @@
 
 
 /***/ },
-/* 21 */
+/* 20 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1459,7 +1492,7 @@
 
 
 /***/ },
-/* 22 */
+/* 21 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1567,7 +1600,7 @@
 
 
 /***/ },
-/* 23 */
+/* 22 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1579,19 +1612,14 @@
 	const paramsRegex = /\S+/g
 	const defaultParams = {mode: 'two-way', on: 'change', type: 'string'}
 
-	document.addEventListener('submit', onSubmit, true)
-
 	function onInput (ev) {
 	  const params = ev.target[secret.params]
 	  if (ev.type === 'submit') {
 	    syncStateWithForm(ev.target)
+	    ev.preventDefault()
 	  } else if (params && (params.on.indexOf(ev.type) !== -1)) {
 	    syncStateWithElement(ev.target)
 	  }
-	}
-
-	function onSubmit (ev) {
-	  ev.preventDefault()
 	}
 
 	function bindable (elem, state, next) {
@@ -1649,7 +1677,11 @@
 	    throw new TypeError('bind mode must be two-way, one-time or one-way')
 	  }
 	  for (let eventName of params.on) {
-	    document.addEventListener(eventName, onInput, true)
+	    // delegate to the nearest root (shadow or document)
+	    while (elem.parentNode) {
+	      elem = elem.parentNode
+	    }
+	    elem.addEventListener(eventName, onInput, true)
 	  }
 	}
 
@@ -1724,7 +1756,7 @@
 
 
 /***/ },
-/* 24 */
+/* 23 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1776,7 +1808,7 @@
 
 
 /***/ },
-/* 25 */
+/* 24 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1815,7 +1847,7 @@
 
 
 /***/ },
-/* 26 */
+/* 25 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1829,7 +1861,7 @@
 	const watchedNodes = new Set()
 	let checkQueued = false
 
-	window.addEventListener('animationend', onAnimationEnd, true)
+	// window.addEventListener('animationend', onAnimationEnd, true)
 
 	function onAnimationEnd (ev) {
 	  const elem = ev.target
@@ -1860,7 +1892,7 @@
 	  if (this[secret.entering] !== false) {
 	    this[secret.entering] = true
 	    if (typeof animation === 'object' && animation !== null) {
-	      this.style.animation = animationObjectToString (animation)
+	      this.style.animation = animationObjectToString(animation)
 	    } else if (typeof animation === 'string') {
 	      this.style.animation = animation
 	    }
@@ -1869,13 +1901,13 @@
 	}
 
 	function leaveAttribute (animation) {
-	  const parent = this.parentNode
+	  const parent = this.parentNode || this.host
 	  watchedNodes.add(this)
 	  this.$cleanup(unwatch)
 	  this.$cleanup(() => {
 	    this[secret.leaving] = true
 	    if (typeof animation === 'object' && animation !== null) {
-	      this.style.animation = animationObjectToString (animation)
+	      this.style.animation = animationObjectToString(animation)
 	    } else if (typeof animation === 'string') {
 	      this.style.animation = animation
 	    }
@@ -1885,6 +1917,12 @@
 	      toAbsolutePosition(this)
 	    }
 	  })
+	  // not optimal, fix this with performance batch
+	  let root = this
+	  while (root.parentNode) {
+	    root = root.parentNode
+	  }
+	  root.addEventListener('animationend', onAnimationEnd, true)
 	}
 
 	function moveAttribute (transition) {
@@ -1964,7 +2002,7 @@
 
 	function setAnimationDefaults (elem) {
 	  const style = elem.style
-	  if (style.animationDuration === 'initial' || style.animationDuration === '') {
+	  if (style.animationDuration === 'initial' || style.animationDuration === '' || style.animationDuration === '0s') {
 	    elem.style.animationDuration = '1s'
 	  }
 	  if (style.animationFillMode === 'initial' || style.animationFillMode === '' || style.animationFillMode === 'none') {
@@ -1974,20 +2012,21 @@
 
 	function setTransitionDefaults (elem) {
 	  const style = elem.style
-	  if (style.transitionDuration === 'initial' || style.transitionDuration === '') {
+	  if (style.transitionDuration === 'initial' || style.transitionDuration === '' || style.transitionDuration === '0s') {
 	    style.transitionDuration = '1s'
 	  }
 	}
 
 	function shouldAbsolutePosition (elem) {
+	  elem = elem.parentNode || elem.host
 	  while (elem) {
-	    elem = elem.parentNode
 	    if (elem[secret.leaving]) {
 	      return false
 	    }
 	    if (elem.$root) {
 	      return true
 	    }
+	    elem = elem.parentNode || elem.host
 	  }
 	  return true
 	}
@@ -2019,7 +2058,7 @@
 
 
 /***/ },
-/* 27 */
+/* 26 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2142,7 +2181,7 @@
 
 
 /***/ },
-/* 28 */
+/* 27 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2261,7 +2300,7 @@
 
 
 /***/ },
-/* 29 */
+/* 28 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2291,7 +2330,9 @@
 	  const config = this[secret.config]
 	  config.path = path
 
-	  const href = path + (this.search || '')
+	  let route = pathToRoute(path)
+	  route = route.some(filterRelativeTokens) ? relativeToAbsoluteRoute(this, route) : route
+	  const href =  routeToPath(route) + (this.search || '')
 	  this.setAttribute('href', href)
 	  this.addEventListener('click', onClick, true)
 	}
@@ -2367,11 +2408,12 @@
 	}
 
 	function findParentRouter (node) {
-	  while(node.parentNode) {
-	    node = node.parentNode
+	  node = node.parentNode
+	  while (node) {
 	    if (node.$routerLevel !== undefined) {
 	      return node
 	    }
+	    node = node.parentNode
 	  }
 	}
 
@@ -2440,12 +2482,12 @@
 
 
 /***/ },
-/* 30 */
+/* 29 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const observer = __webpack_require__(31)
+	const observer = __webpack_require__(30)
 
 	function observe (node, state) {
 	  node.$contextState = observer.observable(node.$contextState)
@@ -2469,12 +2511,12 @@
 
 
 /***/ },
-/* 31 */
+/* 30 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const nextTick = __webpack_require__(32)
+	const nextTick = __webpack_require__(31)
 
 	const proxies = new WeakMap()
 	const observers = new WeakMap()
@@ -2608,7 +2650,7 @@
 
 
 /***/ },
-/* 32 */
+/* 31 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2645,28 +2687,28 @@
 
 
 /***/ },
-/* 33 */
+/* 32 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  app: __webpack_require__(34),
-	  router: __webpack_require__(35)
+	  app: __webpack_require__(33),
+	  router: __webpack_require__(34)
 	}
 
 
 /***/ },
-/* 34 */
+/* 33 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const component = __webpack_require__(5)
-	const middlewares = __webpack_require__(13)
+	const component = __webpack_require__(4)
+	const middlewares = __webpack_require__(12)
 
 	module.exports = function app (config) {
-	  config = Object.assign({root: true}, config)
+	  config = Object.assign({root: true, isolate: 'middlewares'}, config)
 
 	  return component(config)
 	    .useOnContent(middlewares.observe)
@@ -2686,13 +2728,13 @@
 
 
 /***/ },
-/* 35 */
+/* 34 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const component = __webpack_require__(5)
-	const middlewares = __webpack_require__(13)
+	const component = __webpack_require__(4)
+	const middlewares = __webpack_require__(12)
 
 	module.exports = function routerComp (config) {
 	  return component(config)
@@ -2701,26 +2743,26 @@
 
 
 /***/ },
-/* 36 */
+/* 35 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  capitalize: __webpack_require__(37),
-	  uppercase: __webpack_require__(38),
-	  lowercase: __webpack_require__(39),
-	  unit: __webpack_require__(40),
-	  json: __webpack_require__(41),
-	  slice: __webpack_require__(42),
-	  date: __webpack_require__(43),
-	  time: __webpack_require__(44),
-	  datetime: __webpack_require__(45)
+	  capitalize: __webpack_require__(36),
+	  uppercase: __webpack_require__(37),
+	  lowercase: __webpack_require__(38),
+	  unit: __webpack_require__(39),
+	  json: __webpack_require__(40),
+	  slice: __webpack_require__(41),
+	  date: __webpack_require__(42),
+	  time: __webpack_require__(43),
+	  datetime: __webpack_require__(44)
 	}
 
 
 /***/ },
-/* 37 */
+/* 36 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2735,7 +2777,7 @@
 
 
 /***/ },
-/* 38 */
+/* 37 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2749,7 +2791,7 @@
 
 
 /***/ },
-/* 39 */
+/* 38 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2763,7 +2805,7 @@
 
 
 /***/ },
-/* 40 */
+/* 39 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2781,7 +2823,7 @@
 
 
 /***/ },
-/* 41 */
+/* 40 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2795,7 +2837,7 @@
 
 
 /***/ },
-/* 42 */
+/* 41 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2809,7 +2851,7 @@
 
 
 /***/ },
-/* 43 */
+/* 42 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2823,7 +2865,7 @@
 
 
 /***/ },
-/* 44 */
+/* 43 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2837,7 +2879,7 @@
 
 
 /***/ },
-/* 45 */
+/* 44 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2851,22 +2893,22 @@
 
 
 /***/ },
-/* 46 */
+/* 45 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  if: __webpack_require__(47),
-	  delay: __webpack_require__(48),
-	  debounce: __webpack_require__(49),
-	  throttle: __webpack_require__(50),
-	  key: __webpack_require__(51)
+	  if: __webpack_require__(46),
+	  delay: __webpack_require__(47),
+	  debounce: __webpack_require__(48),
+	  throttle: __webpack_require__(49),
+	  key: __webpack_require__(50)
 	}
 
 
 /***/ },
-/* 47 */
+/* 46 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2879,7 +2921,7 @@
 
 
 /***/ },
-/* 48 */
+/* 47 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2893,7 +2935,7 @@
 
 
 /***/ },
-/* 49 */
+/* 48 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2910,7 +2952,7 @@
 
 
 /***/ },
-/* 50 */
+/* 49 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2922,28 +2964,23 @@
 	  if (threshold === undefined || isNaN(threshold)) {
 	    threshold = 200
 	  }
-	  const last = context[lastExecution]
-	  if (last && Date.now() < (last + threshold)) {
-	    clearTimeout(context[timer])
-	    context[timer] = setTimeout(execute, context, next, threshold)
-	  } else {
-	    execute(context, next)
-	  }
-	}
 
-	function execute (context, next) {
-	  context[lastExecution] = Date.now()
-	  next()
+	  const last = context[lastExecution]
+	  const now = Date.now()
+	  if (!last || (last + threshold) < now) {
+	    context[lastExecution] = now
+	    next()
+	  }
 	}
 
 
 /***/ },
-/* 51 */
+/* 50 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const stringToCode = __webpack_require__(52)
+	const stringToCode = __webpack_require__(51)
 
 	module.exports = function keyLimiter (next, context, ...keys) {
 	  if (!(context.$event instanceof KeyboardEvent)) {
@@ -2959,7 +2996,7 @@
 
 
 /***/ },
-/* 52 */
+/* 51 */
 /***/ function(module, exports) {
 
 	// Source: http://jsfiddle.net/vWx8V/
@@ -3111,14 +3148,14 @@
 
 
 /***/ },
-/* 53 */
+/* 52 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	// use Firebase and EventListener for simple real-time updates
-	const Firebase = __webpack_require__(54)
-	const EventListener = __webpack_require__(55)
+	const Firebase = __webpack_require__(53)
+	const EventListener = __webpack_require__(54)
 
 	const api = new Firebase('https://hacker-news.firebaseio.com/v0')
 	const store = new EventListener()
@@ -3194,7 +3231,7 @@
 
 
 /***/ },
-/* 54 */
+/* 53 */
 /***/ function(module, exports) {
 
 	/*! @license Firebase v2.4.2
@@ -3480,7 +3517,7 @@
 
 
 /***/ },
-/* 55 */
+/* 54 */
 /***/ function(module, exports) {
 
 	// Copyright Joyent, Inc. and other Node contributors.
@@ -3788,24 +3825,24 @@
 
 
 /***/ },
-/* 56 */
+/* 55 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	__webpack_require__(57)
+	__webpack_require__(56)
+	__webpack_require__(59)
 	__webpack_require__(60)
-	__webpack_require__(61)
-	__webpack_require__(64)
-	__webpack_require__(67)
-	__webpack_require__(70)
-	__webpack_require__(73)
-	__webpack_require__(76)
-	__webpack_require__(79)
+	__webpack_require__(63)
+	__webpack_require__(66)
+	__webpack_require__(69)
+	__webpack_require__(72)
+	__webpack_require__(75)
+	__webpack_require__(78)
 
 
 /***/ },
-/* 57 */
+/* 56 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3818,8 +3855,8 @@
 	// register the component as 'hacker-news', from now on it can be used as <hacker-news></hacker-news>
 	nx.components.app()
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(58),
-	    style: __webpack_require__(59)
+	    template: __webpack_require__(57),
+	    style: __webpack_require__(58)
 	  }))
 	  .register('hacker-news')
 
@@ -3847,19 +3884,19 @@
 
 
 /***/ },
-/* 58 */
+/* 57 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- adds routing logic with the router comp and route attributes -->\n<!-- the child which has a route attribute matching with the URL path is displayed -->\n<!-- adds leave animations to the router views -->\n<nav is=\"app-nav\"></nav>\n<app-router>\n  <story-list route=\"stories\" default-route leave-animation=\"fadeOut .6s\"></story-list>\n  <user-page route=\"user\" leave-animation=\"fadeOut .6s\"></user-page>\n  <story-page route=\"story\" leave-animation=\"fadeOut .6s\"></story-page>\n</app-router>\n"
 
 /***/ },
-/* 59 */
+/* 58 */
 /***/ function(module, exports) {
 
-	module.exports = "hacker-news {\n  display: block;\n  width: 85%;\n  margin: auto;\n  color: black;\n  background-color: #f6f6ef;\n  font: 10pt Verdana, Geneva, sans-serif;\n}\nhacker-news a {\n  color: inherit;\n  text-decoration: none;\n  cursor: pointer;\n}\nhacker-news .light {\n  color: #828282;\n}\nhacker-news .light a:hover {\n  text-decoration: underline;\n}\nhacker-news .subtext {\n  font-size: 7pt;\n}\n@media all and (max-width: 750px) {\n  body {\n    padding: 0;\n    margin: 0;\n  }\n  hacker-news {\n    width: 100%;\n  }\n}\n"
+	module.exports = ":host {\n  display: block;\n  width: 85%;\n  margin: auto;\n  color: black;\n  background-color: rgb(246, 246, 239);\n  font: 10pt Verdana, Geneva, sans-serif;\n}\n\na {\n  color: inherit;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.light {\n  color: #828282;\n}\n\n.light a:hover {\n  text-decoration: underline;\n}\n\n.subtext {\n  font-size: 7pt;\n}\n\n@media all and (max-width: 750px) {\n  :host {\n    width: 100%\n  }\n}\n"
 
 /***/ },
-/* 60 */
+/* 59 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -3871,7 +3908,7 @@
 
 
 /***/ },
-/* 61 */
+/* 60 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3885,26 +3922,26 @@
 	    type: {type: 'string', default: 'top'}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(62),
-	    style: __webpack_require__(63)
+	    template: __webpack_require__(61),
+	    style: __webpack_require__(62)
 	  }))
 	  .register('app-nav')
 
 
 /***/ },
-/* 62 */
+/* 61 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- adds client side routing navigation with the iref and iref-params attributes -->\n<a iref=\"stories\" $iref-params=\"{type: 'top'}\"><b>Hacker News</b></a>\n<a iref=\"stories\" $iref-params=\"{type: 'new'}\" @class=\"{active: type === 'new'}\">new</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'show'}\" @class=\"{active: type === 'show'}\">show</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'ask'}\" @class=\"{active: type === 'ask'}\">ask</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'job'}\" @class=\"{active: type === 'job'}\">jobs</a>\n<span>Built with\n  <a href=\"http://nx-framework.com\" target=\"_blank\">NX</a> |\n  <a href=\"https://github.com/nx-hacker-news/nx-hacker-news.github.io\">Source</a>\n</span>\n"
 
 /***/ },
-/* 63 */
+/* 62 */
 /***/ function(module, exports) {
 
-	module.exports = "nav[is=\"app-nav\"] {\n  background-color: #ff6600;\n  padding: 4px;\n  overflow: hidden;\n}\nnav[is=\"app-nav\"] a.active {\n  color: white;\n}\nnav[is=\"app-nav\"] b {\n  padding: 0 4px;\n}\nnav[is=\"app-nav\"] span {\n  color: white;\n  display: inline-block;\n  float: right;\n  font-size: 9pt;\n}\nnav[is=\"app-nav\"] span a:hover {\n  text-decoration: underline;\n}\n"
+	module.exports = ":host {\n  background-color: rgb(255, 102, 0);\n  padding: 4px;\n  overflow: hidden;\n}\n\na.active {\n  color: white;\n}\n\nb {\n  padding: 0 4px;\n}\n\nspan {\n  color: white;\n  display: inline-block;\n  float: right;\n  font-size: 9pt;\n}\n\nspan a:hover {\n  text-decoration: underline;\n}\n"
 
 /***/ },
-/* 64 */
+/* 63 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3920,8 +3957,8 @@
 	    page: {type: 'number', history: true, default: 0}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(65),
-	    style: __webpack_require__(66)
+	    template: __webpack_require__(64),
+	    style: __webpack_require__(65)
 	  }))
 	  .use(setup)
 	  .register('story-list')
@@ -3941,19 +3978,19 @@
 
 
 /***/ },
+/* 64 */
+/***/ function(module, exports) {
+
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"stories\" repeat-value=\"story\" track-by=\"id\">\n  <story-item $story=\"story\"\n    enter-animation=\"fadeIn .6s .3s\"\n    move-animation=\".6s .3s\"\n    leave-animation=\"fadeOut .6s\">\n  </story-item>\n</div>\n<a #click=\"page++\" class=\"paginator\">More</a>\n"
+
+/***/ },
 /* 65 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"stories\" repeat-value=\"story\" track-by=\"id\">\n  <story-item $story=\"story\"\n    enter-animation=\"fadeIn .6s .3s\"\n    move-animation=\".6s .3s\"\n    leave-animation=\"fadeOut .6s\">\n  </story-item>\n</div>\n<a #click=\"page++\" class=\"story-more\">More</a>\n"
+	module.exports = ":host {\n  display: block;\n  position: relative;\n  padding: 10px;\n  padding-bottom: 30px;\n  min-height: 1000px;\n}\n\nstory-item {\n  margin-bottom: 8px;\n}\n\n.paginator {\n  position: absolute;\n  padding: 10px 0;\n  bottom: 0;\n}\n"
 
 /***/ },
 /* 66 */
-/***/ function(module, exports) {
-
-	module.exports = "story-list {\n  display: block;\n  position: relative;\n  padding: 10px;\n  padding-bottom: 30px;\n  min-height: 1000px;\n}\nstory-list story-item {\n  margin-bottom: 8px;\n}\nstory-list .story-more {\n  position: absolute;\n  padding: 10px 0;\n  bottom: 0;\n}\n"
-
-/***/ },
-/* 67 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3964,8 +4001,8 @@
 	// register the component as 'story-item', from now on it can be used as <story-item></story-item>
 	nx.component()
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(68),
-	    style: __webpack_require__(69)
+	    template: __webpack_require__(67),
+	    style: __webpack_require__(68)
 	  }))
 	  .use(setup)
 	  .register('story-item')
@@ -3978,19 +4015,19 @@
 
 
 /***/ },
-/* 68 */
+/* 67 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div $if=\"story && !story.deleted && !story.dead && story.title\">\n  <div $if=\"story.url\">\n    <a $href=\"story.url\">${story.title}</a>\n    <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n  </div>\n  <div $if=\"!story.url\">\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n  </div>\n\n  <div $if=\"story.type === 'job'\" class=\"subtext light\">\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n  </div>\n  <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n    ${story.score | unit 'point'} by\n    <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n  </div>\n</div>\n"
 
 /***/ },
-/* 69 */
+/* 68 */
 /***/ function(module, exports) {
 
-	module.exports = "story-item {\n  display: block;\n  min-height: 27px;\n}\n"
+	module.exports = ":host {\n  display: block;\n  min-height: 27px;\n}\n"
 
 /***/ },
-/* 70 */
+/* 69 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -4005,8 +4042,8 @@
 	    id: {type: 'number', readOnly: true, required: true}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(71),
-	    style: __webpack_require__(72)
+	    template: __webpack_require__(70),
+	    style: __webpack_require__(71)
 	  }))
 	  .use(setup)
 	  .register('story-page')
@@ -4019,19 +4056,19 @@
 
 
 /***/ },
+/* 70 */
+/***/ function(module, exports) {
+
+	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <story-item $story></story-item>\n    <dynamic-html $content=\"story.text\" class=\"body\"></dynamic-html>\n    <lu $repeat=\"story.kids\" repeat-value=\"commentId\">\n      <li is=\"comment-item\" $comment-id=\"commentId\"></li>\n    </lu>\n  </div>\n</div>\n"
+
+/***/ },
 /* 71 */
 /***/ function(module, exports) {
 
-	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <story-item $story></story-item>\n    <dynamic-html $content=\"story.text\" class=\"story-text\"></dynamic-html>\n    <lu $repeat=\"story.kids\" repeat-value=\"commentId\">\n      <li is=\"comment-item\" $comment-id=\"commentId\"></li>\n    </lu>\n  </div>\n</div>\n"
+	module.exports = ":host {\n  display: block;\n  padding: 10px;\n}\n\n.body {\n  display: block;\n  margin: 20px 0;\n}\n"
 
 /***/ },
 /* 72 */
-/***/ function(module, exports) {
-
-	module.exports = "story-page {\n  display: block;\n  padding: 10px;\n}\nstory-page .story-text {\n  display: block;\n  margin: 20px 0;\n}\n"
-
-/***/ },
-/* 73 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -4046,8 +4083,8 @@
 	    id: {type: 'string', readOnly: true, required: true}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(74),
-	    style: __webpack_require__(75)
+	    template: __webpack_require__(73),
+	    style: __webpack_require__(74)
 	  }))
 	  .use(setup)
 	  .register('user-page')
@@ -4060,19 +4097,19 @@
 
 
 /***/ },
-/* 74 */
+/* 73 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"user\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <p>user: ${user.id}</p>\n    <p>created: ${user.created}</p>\n    <p>karma: ${user.karma}</p>\n    <p>about: <dynamic-html $content=\"user.about\"></dynamic-html></p>\n  </div>\n</div>\n"
 
 /***/ },
-/* 75 */
+/* 74 */
 /***/ function(module, exports) {
 
-	module.exports = "user-page {\n  display: block;\n  padding: 10px;\n}\n"
+	module.exports = ":host {\n  display: block;\n  padding: 10px;\n}\n"
 
 /***/ },
-/* 76 */
+/* 75 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -4083,8 +4120,8 @@
 	// register the component as 'comment-item', from now on it can be used as <comment-item></comment-item>
 	nx.component({element: 'li'})
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(77),
-	    style: __webpack_require__(78)
+	    template: __webpack_require__(76),
+	    style: __webpack_require__(77)
 	  }))
 	  .use(setup)
 	  .register('comment-item')
@@ -4100,19 +4137,19 @@
 
 
 /***/ },
+/* 76 */
+/***/ function(module, exports) {
+
+	module.exports = "\n<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s\">\n    <div class=\"header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
+
+/***/ },
 /* 77 */
 /***/ function(module, exports) {
 
-	module.exports = "\n<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s\">\n    <div class=\"comment-header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"comment-body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
+	module.exports = ":host {\n  margin: 20px 0;\n  font-size: 9pt;\n  list-style-type: none;\n}\n\n.header {\n  margin-bottom: 5px;\n}\n\n.body a {\n  text-decoration: underline;\n}\n"
 
 /***/ },
 /* 78 */
-/***/ function(module, exports) {
-
-	module.exports = "li[is=\"comment-item\"] {\n  margin: 20px 0;\n  font-size: 9pt;\n  list-style-type: none;\n}\nli[is=\"comment-item\"] .comment-header {\n  margin-bottom: 5px;\n}\nli[is=\"comment-item\"] .comment-body a {\n  text-decoration: underline;\n}\n"
-
-/***/ },
-/* 79 */
 /***/ function(module, exports) {
 
 	'use strict'
