@@ -5,24 +5,20 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack",
-    "minify": "uglifyjs bundle.js -c -m -o bundle.js",
     "prestart": "npm run build",
     "start": "node server.js"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@risingstack/nx-framework": "^1.0.0-alpha.5.0.0",
-    "@risingstack/nx-seo": "^1.0.3",
     "compression": "^1.6.2",
-    "events": "^1.1.1",
-    "express": "^4.14.0",
-    "firebase": "^2.4.2"
+    "express": "^4.14.0"
   },
   "devDependencies": {
-    "raw-loader": "^0.5.1",
-    "css-loader": "^0.25.0",
+    "@nx-js/framework": "^1.0.0-beta.1.0.0",
+    "events": "^1.1.1",
+    "firebase": "^2.4.2",
     "webpack": "^1.13.1",
-    "uglify-js": "git://github.com/mishoo/UglifyJS2#harmony"
+    "raw-loader": "^0.5.1"
   }
 }

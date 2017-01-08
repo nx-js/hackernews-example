@@ -50,14 +50,23 @@
 	__webpack_require__(1)
 
 	// this exposes a global store object, that can be used to access Hacker News data
-	__webpack_require__(52)
+	__webpack_require__(69)
 
 	// this registers the NX components to be used in HTML by their name
-	__webpack_require__(55)
+	__webpack_require__(72)
 
 
 /***/ },
 /* 1 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	module.exports = __webpack_require__(2)
+
+
+/***/ },
+/* 2 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -67,24 +76,16 @@
 	if (typeof Proxy === 'undefined') {
 	  nx = { supported: false }
 	} else {
-	  __webpack_require__(2)
-
 	  nx = {
-	    component: __webpack_require__(4),
-	    middlewares: __webpack_require__(12),
-	    components: __webpack_require__(32),
-	    filters: __webpack_require__(35),
-	    limiters: __webpack_require__(45),
-	    observer: __webpack_require__(30),
-	    compiler: __webpack_require__(15),
+	    component: __webpack_require__(3),
+	    middlewares: __webpack_require__(14),
+	    components: __webpack_require__(44),
+	    utils: __webpack_require__(49),
 	    supported: true
 	  }
-	  for (let name in nx.filters) {
-	    nx.middlewares.expression.filter(name, nx.filters[name])
-	  }
-	  for (let name in nx.limiters) {
-	    nx.middlewares.code.limiter(name, nx.limiters[name])
-	  }
+
+	  __webpack_require__(50)
+	  __webpack_require__(61)
 	}
 
 	if (typeof module !== 'undefined' && module.exports) {
@@ -96,16 +97,26 @@
 
 
 /***/ },
-/* 2 */
+/* 3 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	__webpack_require__(3)
+	__webpack_require__(4)
+	module.exports = __webpack_require__(6)
 
 
 /***/ },
-/* 3 */
+/* 4 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	__webpack_require__(5)
+
+
+/***/ },
+/* 5 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -181,25 +192,25 @@
 
 
 /***/ },
-/* 4 */
+/* 6 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	module.exports = __webpack_require__(5)
+	module.exports = __webpack_require__(7)
 
 
 /***/ },
-/* 5 */
+/* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const validateConfig = __webpack_require__(6)
-	const validateMiddlewares = __webpack_require__(7)
-	const getContext = __webpack_require__(8)
-	const onNodeAdded = __webpack_require__(9)
-	const onNodeRemoved = __webpack_require__(11)
+	const validateConfig = __webpack_require__(8)
+	const validateMiddlewares = __webpack_require__(9)
+	const getContext = __webpack_require__(10)
+	const onNodeAdded = __webpack_require__(11)
+	const onNodeRemoved = __webpack_require__(13)
 
 	const secret = {
 	  config: Symbol('component config')
@@ -208,7 +219,8 @@
 	  childList: true,
 	  subtree: true
 	}
-	const addedNodeContext = {}
+	let context
+	let prevParent
 	const addedNodes = new Set()
 
 	module.exports = function component (rawConfig) {
@@ -273,7 +285,7 @@
 	    this.$registered = true
 
 	    if (config.root) {
-	      this.$root = true
+	      this.$root = this
 	      const contentObserver = new MutationObserver(onMutations)
 	      contentObserver.observe(this, observerConfig)
 	    }
@@ -289,7 +301,7 @@
 	  onNodeRemoved(this)
 	}
 
-	function onMutations (mutations) {
+	function onMutations (mutations, contentObserver) {
 	  let mutationIndex = mutations.length
 	  while (mutationIndex--) {
 	    const mutation = mutations[mutationIndex]
@@ -306,21 +318,28 @@
 	      addedNodes.add(nodes[nodeIndex])
 	    }
 	  }
+
+	  mutations = contentObserver.takeRecords()
+	  if (mutations.length) {
+	    onMutations(mutations, contentObserver)
+	  }
+
 	  processAddedNodes()
 	}
 
 	function processAddedNodes () {
-	  addedNodes.forEach(processAddedNode, addedNodeContext)
+	  addedNodes.forEach(processAddedNode)
 	  addedNodes.clear()
+	  context = prevParent = undefined
 	}
 
 	function processAddedNode (node) {
 	  const parentNode = node.parentNode || node.host
-	  if (this.parent !== parentNode) {
-	    this.parent = parentNode
-	    this.context = getContext(parentNode)
+	  if (prevParent !== parentNode) {
+	    prevParent = parentNode
+	    context = getContext(parentNode)
 	  }
-	  onNodeAdded(node, this.context)
+	  onNodeAdded(node, context)
 	  if (node.shadowRoot) {
 	    const shadowObserver = new MutationObserver(onMutations)
 	    shadowObserver.observe(node.shadowRoot, observerConfig)
@@ -329,7 +348,7 @@
 
 
 /***/ },
-/* 6 */
+/* 8 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -389,7 +408,7 @@
 
 
 /***/ },
-/* 7 */
+/* 9 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -439,7 +458,7 @@
 
 
 /***/ },
-/* 8 */
+/* 10 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -460,36 +479,42 @@
 	        context.contentMiddlewares = node.$contentMiddlewares.concat(context.contentMiddlewares)
 	      }
 	    }
-	    if (node.$root) {
+	    if (node === node.$root) {
+	      context.root = context.root || node
 	      return context
 	    }
-	    node = node.parentNode || node.host
+	    if (node.host) {
+	      context.root = context.root || node
+	      node = node.host
+	    } else {
+	      node = node.parentNode
+	    }
 	  }
 	  return context
 	}
 
 
 /***/ },
-/* 9 */
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const validateMiddlewares = __webpack_require__(7)
-	const runMiddlewares = __webpack_require__(10)
+	const validateMiddlewares = __webpack_require__(9)
+	const runMiddlewares = __webpack_require__(12)
 
 	module.exports = function onNodeAdded (node, context) {
 	  const parent = node.parentNode
 	  const validParent = (parent && parent.$lifecycleStage === 'attached')
-	  if (validParent && node.$root) {
+	  if (validParent && node === node.$root) {
 	    throw new Error(`Nested root component: ${node.tagName}`)
 	  }
-	  if ((validParent || node.$root) && context.isolate !== true) {
-	    setupNodeAndChildren(node, context.state, context.contentMiddlewares)
+	  if ((validParent || node === node.$root) && context.isolate !== true) {
+	    setupNodeAndChildren(node, context.state, context.contentMiddlewares, context.root)
 	  }
 	}
 
-	function setupNodeAndChildren (node, state, contentMiddlewares) {
+	function setupNodeAndChildren (node, state, contentMiddlewares, root) {
 	  const type = node.nodeType
 	  if (!shouldProcess(node, type)) return
 	  node.$lifecycleStage = 'attached'
@@ -499,6 +524,8 @@
 	  if (node.$inheritState) {
 	    Object.setPrototypeOf(node.$state, node.$contextState)
 	  }
+
+	  node.$root = node.$root || root
 
 	  if (node.$isolate === 'middlewares') {
 	    contentMiddlewares = node.$contentMiddlewares || []
@@ -515,13 +542,13 @@
 	  if (type === 1 && node.$isolate !== true) {
 	    let child = node.firstChild
 	    while (child) {
-	      setupNodeAndChildren(child, node.$state, contentMiddlewares)
+	      setupNodeAndChildren(child, node.$state, contentMiddlewares, node.$root)
 	      child = child.nextSibling
 	    }
 
 	    child = node.shadowRoot ? node.shadowRoot.firstChild : undefined
 	    while (child) {
-	      setupNodeAndChildren(child, node.$state, contentMiddlewares)
+	      setupNodeAndChildren(child, node.$state, contentMiddlewares, node.shadowRoot)
 	      child = child.nextSibling
 	    }
 	  }
@@ -549,7 +576,7 @@
 
 
 /***/ },
-/* 10 */
+/* 12 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -581,7 +608,7 @@
 
 
 /***/ },
-/* 11 */
+/* 13 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -621,50 +648,54 @@
 
 
 /***/ },
-/* 12 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  attributes: __webpack_require__(13),
-	  code: __webpack_require__(14),
-	  expression: __webpack_require__(16),
-	  events: __webpack_require__(17),
-	  interpolate: __webpack_require__(18),
-	  render: __webpack_require__(19),
-	  content: __webpack_require__(20),
-	  flow: __webpack_require__(21),
-	  bindable: __webpack_require__(22),
-	  bind: __webpack_require__(23),
-	  style: __webpack_require__(24),
-	  animate: __webpack_require__(25),
-	  router: __webpack_require__(26),
-	  params: __webpack_require__(27),
-	  ref: __webpack_require__(28),
-	  observe: __webpack_require__(29)
+	  attributes: __webpack_require__(15),
+	  events: __webpack_require__(22),
+	  interpolate: __webpack_require__(23),
+	  render: __webpack_require__(24),
+	  flow: __webpack_require__(25),
+	  bindable: __webpack_require__(27),
+	  bind: __webpack_require__(28),
+	  style: __webpack_require__(29),
+	  animate: __webpack_require__(30),
+	  route: __webpack_require__(31),
+	  params: __webpack_require__(32),
+	  ref: __webpack_require__(33),
+	  observe: __webpack_require__(34)
 	}
 
 
 /***/ },
-/* 13 */
-/***/ function(module, exports) {
+/* 15 */
+/***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
+	const compiler = __webpack_require__(16)
+
+	let currAttributes
 	const handlers = new Map()
 	const attributeCache = new Map()
 
 	function attributes (elem, state, next) {
 	  if (elem.nodeType !== 1) return
 
-	  handlers.clear()
+	  currAttributes = getAttributes(elem)
 	  elem.$attribute = $attribute
+	  elem.$hasAttribute = $hasAttribute
 	  next()
-	  handleAttributes(elem, getAttributes(elem))
+
+	  currAttributes.forEach(processAttributeWithoutHandler, elem)
+	  handlers.forEach(processAttributeWithHandler, elem)
+	  handlers.clear()
 	}
 	attributes.$name = 'attributes'
-	attributes.$require = ['observe', 'expression']
+	attributes.$require = ['observe']
 	module.exports = attributes
 
 	function $attribute (name, handler) {
@@ -674,53 +705,72 @@
 	  if (typeof handler !== 'function') {
 	    throw new TypeError('second argument must be a function')
 	  }
-	  handlers.set(name, handler)
+	  if (currAttributes.has(name)) {
+	    handlers.set(name, handler)
+	  }
+	}
+
+	function $hasAttribute (name) {
+	  if (typeof name !== 'string') {
+	    throw new TypeError('first argument must be a string')
+	  }
+	  return currAttributes.has(name)
 	}
 
 	function getAttributes (elem) {
 	  const cloneId = elem.getAttribute('clone-id')
+	  let attributes
 	  if (cloneId) {
-	    let attributes = attributeCache.get(cloneId)
+	    attributes = attributeCache.get(cloneId)
 	    if (!attributes) {
-	      attributes = Array.prototype.map.call(elem.attributes, cacheAttribute)
+	      attributes = cacheAttributes(elem.attributes)
 	      attributeCache.set(cloneId, attributes)
 	    }
 	    return attributes
 	  }
-	  return elem.attributes
+	  return cacheAttributes(elem.attributes)
 	}
 
-	function cacheAttribute (attr) {
-	  return {name: attr.name, value: attr.value}
-	}
-
-	function handleAttributes (elem, attributes) {
+	function cacheAttributes (attributes) {
 	  let i = attributes.length
+	  const cachedAttributes = new Map()
 	  while (i--) {
-	    const attr = attributes[i]
-	    const type = attr.name[0]
+	    const attribute = attributes[i]
+	    const type = attribute.name[0]
+	    const name = (type === '$' || type === '@') ? attribute.name.slice(1) : attribute.name
+	    cachedAttributes.set(name, {value: attribute.value, type})
+	  }
+	  return cachedAttributes
+	}
 
-	    if (type === '@') {
-	      attr.$name = attr.$name || attr.name.slice(1)
-	      attr.$expression = attr.$expression || elem.$compileExpression(attr.value || attr.$name)
-	      const handler = handlers.get(attr.$name) || defaultHandler
-	      elem.$observe(expressionHandler, attr, handler)
-	      continue
-	    }
-
-	    if (type === '$') {
-	      attr.$name = attr.$name || attr.name.slice(1)
-	      attr.$expression = attr.$expression || elem.$compileExpression(attr.value || attr.$name)
-	      const handler = handlers.get(attr.$name) || defaultHandler
-	      expressionHandler.call(elem, attr, handler)
-	      continue
-	    }
-
-	    const handler = handlers.get(attr.name)
-	    if (handler) {
-	      handler.call(elem, attr.value, attr.name)
+	function processAttributeWithoutHandler (attr, name) {
+	  if (!handlers.has(name)) {
+	    if (attr.type === '$') {
+	      const expression = compiler.compileExpression(attr.value || name)
+	      this.$queue(processExpression, expression, name, defaultHandler)
+	    } else if (attr.type === '@') {
+	      const expression = compiler.compileExpression(attr.value || name)
+	      this.$observe(processExpression, expression, name, defaultHandler)
 	    }
 	  }
+	}
+
+	function processAttributeWithHandler (handler, name) {
+	  const attr = currAttributes.get(name)
+	  if (attr.type === '@') {
+	    const expression = compiler.compileExpression(attr.value || name)
+	    this.$observe(processExpression, expression, name, handler)
+	  } else if (attr.type === '$') {
+	    const expression = compiler.compileExpression(attr.value || name)
+	    this.$queue(processExpression, expression, name, handler)
+	  } else {
+	    handler.call(this, attr.value, name)
+	  }
+	}
+
+	function processExpression (expression, name, handler) {
+	  const value = expression(this.$contextState)
+	  handler.call(this, value, name)
 	}
 
 	function defaultHandler (value, name) {
@@ -731,118 +781,37 @@
 	  }
 	}
 
-	function expressionHandler (attr, handler) {
-	  const value = attr.$expression(this.$contextState)
-	  handler.call(this, value, attr.$name)
-	}
-
 
 /***/ },
-/* 14 */
+/* 16 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(15)
+	const context = __webpack_require__(17)
+	const modifiers = __webpack_require__(18)
+	const compiler = __webpack_require__(19)
 
-	const limiterRegex = /(?:[^\&]|\&\&)+/g
-	const argsRegex = /\S+/g
-	const codeCache = new Map()
-	const limiters = new Map()
-
-	function code (node) {
-	  node.$compileCode = $compileCode
-	}
-	code.$name = 'code'
-	code.limiter = limiter
-	module.exports = code
-
-	function $compileCode (rawCode) {
-	  if (typeof rawCode !== 'string') {
-	    throw new TypeError('first argument must be a string')
-	  }
-	  let code = codeCache.get(rawCode)
-	  if (!code) {
-	    code = parseCode(rawCode)
-	    codeCache.set(rawCode, code)
-	  }
-
-	  if (typeof code === 'function') {
-	    return code
-	  }
-
-	  const context = {}
-	  return function evaluateCode (state, tempVars) {
-	    let i = 0
-	    function next () {
-	      Object.assign(context, tempVars)
-	      if (i < code.limiters.length) {
-	        const limiter = code.limiters[i++]
-	        const args = limiter.argExpressions.map(evaluateArgExpression, state)
-	        limiter.effect(next, context, ...args)
-	      } else {
-	        code.exec(state, tempVars)
-	      }
-	    }
-	    next()
-	  }
-	}
-
-	function parseCode (rawCode) {
-	  const tokens = rawCode.match(limiterRegex)
-	  if (tokens.length === 1) {
-	    return compiler.compileCode(tokens[0])
-	  }
-
-	  const code = {
-	    exec: compiler.compileCode(tokens[0]),
-	    limiters: []
-	  }
-	  for (let i = 1; i < tokens.length; i++) {
-	    const limiterTokens = tokens[i].match(argsRegex) || []
-	    const limiterName = limiterTokens.shift()
-	    const effect = limiters.get(limiterName)
-	    if (!effect) {
-	      throw new Error(`there is no limiter named ${limiterName}`)
-	    }
-	    code.limiters.push({effect, argExpressions: limiterTokens.map(compileArgExpression)})
-	  }
-	  return code
-	}
-
-	function evaluateArgExpression (argExpression) {
-	  return argExpression(this)
-	}
-
-	function compileArgExpression (argExpression) {
-	  return compiler.compileExpression(argExpression)
-	}
-
-	function limiter (name, handler) {
-	  if (typeof name !== 'string') {
-	    throw new TypeError('first argument must be a string')
-	  }
-	  if (typeof handler !== 'function') {
-	    throw new TypeError('second argument must be a function')
-	  }
-	  if (limiters.has(name)) {
-	    throw new Error(`a limiter named ${name} is already registered`)
-	  }
-	  limiters.set(name, handler)
-	  return this
+	module.exports = {
+	  compileExpression: compiler.compileExpression,
+	  compileCode: compiler.compileCode,
+	  expose: context.expose,
+	  hide: context.hide,
+	  hideAll: context.hideAll,
+	  filter: modifiers.filter,
+	  limiter: modifiers.limiter
 	}
 
 
 /***/ },
-/* 15 */
+/* 17 */
 /***/ function(module, exports) {
 
 	/* WEBPACK VAR INJECTION */(function(global) {'use strict'
 
-	module.exports = {
-	  compileCode,
-	  compileExpression
-	}
+	const globals = new Set()
+	const proxies = new WeakMap()
+	const handlers = {has}
 
 	let globalObj
 	if (typeof window !== 'undefined') globalObj = window // eslint-disable-line
@@ -851,45 +820,33 @@
 	globalObj.$nxCompileToSandbox = toSandbox
 	globalObj.$nxCompileCreateBackup = createBackup
 
-	const proxies = new WeakMap()
-	const expressionCache = new Map()
-	const codeCache = new Map()
-	const handlers = {has}
-
-	function compileExpression (src) {
-	  if (typeof src !== 'string') {
-	    throw new TypeError('first argument must be a string')
-	  }
-	  let expression = expressionCache.get(src)
-	  if (!expression) {
-	    expression = new Function('context', // eslint-disable-line
-	      `const sandbox = $nxCompileToSandbox(context)
-	      try { with (sandbox) { return ${src} } } catch (err) {
-	        if (!(err instanceof TypeError)) throw err
-	      }`)
-	    expressionCache.set(src, expression)
-	  }
-	  return expression
+	module.exports = {
+	  expose,
+	  hide,
+	  hideAll
 	}
 
-	function compileCode (src) {
-	  if (typeof src !== 'string') {
-	    throw new TypeError('first argument must be a string')
+	function expose (...globalNames) {
+	  for (let globalName of globalNames) {
+	    globals.add(globalName)
 	  }
-	  let code = codeCache.get(src)
-	  if (!code) {
-	    code = new Function('context, tempVars', // eslint-disable-line
-	    `const backup = $nxCompileCreateBackup(context, tempVars)
-	    Object.assign(context, tempVars)
-	    const sandbox = $nxCompileToSandbox(context)
-	    try {
-	      with (sandbox) { ${src} }
-	    } finally {
-	      Object.assign(context, backup)
-	    }`)
-	    codeCache.set(src, code)
+	  return this
+	}
+
+	function hide (...globalNames) {
+	  for (let globalName of globalNames) {
+	    globals.delete(globalName)
 	  }
-	  return code
+	  return this
+	}
+
+	function hideAll () {
+	  globals.clear()
+	  return this
+	}
+
+	function has (target, key) {
+	  return globals.has(key) ? Reflect.has(target, key) : true
 	}
 
 	function toSandbox (obj) {
@@ -914,112 +871,240 @@
 	  }
 	}
 
-	function has () {
-	  return true
-	}
-
 	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
 
 /***/ },
-/* 16 */
+/* 18 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const filters = new Map()
+	const limiters = new Map()
+
+	module.exports = {
+	  filters,
+	  limiters,
+	  filter,
+	  limiter
+	}
+
+	function filter (name, handler) {
+	  if (typeof name !== 'string') {
+	    throw new TypeError('First argument must be a string.')
+	  }
+	  if (typeof handler !== 'function') {
+	    throw new TypeError('Second argument must be a function.')
+	  }
+	  if (filters.has(name)) {
+	    throw new Error(`A filter named ${name} is already registered.`)
+	  }
+	  filters.set(name, handler)
+	  return this
+	}
+
+	function limiter (name, handler) {
+	  if (typeof name !== 'string') {
+	    throw new TypeError('First argument must be a string.')
+	  }
+	  if (typeof handler !== 'function') {
+	    throw new TypeError('Second argument must be a function.')
+	  }
+	  if (limiters.has(name)) {
+	    throw new Error(`A limiter named ${name} is already registered.`)
+	  }
+	  limiters.set(name, handler)
+	  return this
+	}
+
+
+/***/ },
+/* 19 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const compiler = __webpack_require__(15)
+	const parser = __webpack_require__(20)
 
-	const filterRegex = /(?:[^\|]|\|\|)+/g
-	const argsRegex = /\S+/g
 	const expressionCache = new Map()
-	const filters = new Map()
+	const codeCache = new Map()
 
-	function expression (node) {
-	  node.$compileExpression = $compileExpression
+	module.exports = {
+	  compileExpression,
+	  compileCode
 	}
-	expression.$name = 'expression'
-	expression.filter = filter
-	module.exports = expression
 
-	function $compileExpression (rawExpression) {
-	  if (typeof rawExpression !== 'string') {
-	    throw new TypeError('first argument must be a string')
+	function compileExpression (src) {
+	  if (typeof src !== 'string') {
+	    throw new TypeError('First argument must be a string.')
 	  }
-	  let expression = expressionCache.get(rawExpression)
+	  let expression = expressionCache.get(src)
 	  if (!expression) {
-	    expression = parseExpression(rawExpression)
-	    expressionCache.set(rawExpression, expression)
+	    expression = parser.parseExpression(src)
+	    expressionCache.set(src, expression)
 	  }
 
 	  if (typeof expression === 'function') {
 	    return expression
 	  }
 
-	  return function evaluateExpression (contextState) {
-	    let value = expression.exec(contextState)
+	  return function evaluateExpression (context) {
+	    let value = expression.exec(context)
 	    for (let filter of expression.filters) {
-	      const args = filter.argExpressions.map(evaluateArgExpression, contextState)
+	      const args = filter.argExpressions.map(evaluateArgExpression, context)
 	      value = filter.effect(value, ...args)
 	    }
 	    return value
 	  }
 	}
 
-	function parseExpression (rawExpression) {
-	  const tokens = rawExpression.match(filterRegex)
-	  if (tokens.length === 1) {
-	    return compiler.compileExpression(tokens[0])
+	function compileCode (src) {
+	  if (typeof src !== 'string') {
+	    throw new TypeError('First argument must be a string.')
+	  }
+	  let code = codeCache.get(src)
+	  if (!code) {
+	    code = parser.parseCode(src)
+	    codeCache.set(src, code)
 	  }
 
-	  const expression = {
-	    exec: compiler.compileExpression(tokens[0]),
-	    filters: []
+	  if (typeof code === 'function') {
+	    return code
 	  }
-	  for (let i = 1; i < tokens.length; i++) {
-	    let filterTokens = tokens[i].match(argsRegex) || []
-	    const filterName = filterTokens.shift()
-	    const effect = filters.get(filterName)
-	    if (!effect) {
-	      throw new Error(`there is no filter named ${filterName}`)
+
+	  const context = {}
+	  return function evaluateCode (state, tempVars) {
+	    let i = 0
+	    function next () {
+	      Object.assign(context, tempVars)
+	      if (i < code.limiters.length) {
+	        const limiter = code.limiters[i++]
+	        const args = limiter.argExpressions.map(evaluateArgExpression, state)
+	        limiter.effect(next, context, ...args)
+	      } else {
+	        code.exec(state, tempVars)
+	      }
 	    }
-	    expression.filters.push({effect, argExpressions: filterTokens.map(compileArgExpression)})
+	    next()
 	  }
-	  return expression
 	}
 
 	function evaluateArgExpression (argExpression) {
 	  return argExpression(this)
 	}
 
-	function compileArgExpression (argExpression) {
-	  return compiler.compileExpression(argExpression)
+
+/***/ },
+/* 20 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const modifiers = __webpack_require__(18)
+	const rawCompiler = __webpack_require__(21)
+
+	const filterRegex = /(?:[^\|]|\|\|)+/g
+	const limiterRegex = /(?:[^&]|&&)+/g
+	const argsRegex = /\S+/g
+
+	module.exports = {
+	  parseExpression,
+	  parseCode
 	}
 
-	function filter (name, handler) {
-	  if (typeof name !== 'string') {
-	    throw new TypeError('first argument must be a string')
+	function parseExpression (src) {
+	  const tokens = src.match(filterRegex)
+	  if (tokens.length === 1) {
+	    return rawCompiler.compileExpression(tokens[0])
 	  }
-	  if (typeof handler !== 'function') {
-	    throw new TypeError('second argument must be a function')
+
+	  const expression = {
+	    exec: rawCompiler.compileExpression(tokens[0]),
+	    filters: []
 	  }
-	  if (filters.has(name)) {
-	    throw new Error(`a filter named ${name} is already registered`)
+	  for (let i = 1; i < tokens.length; i++) {
+	    let filterTokens = tokens[i].match(argsRegex) || []
+	    const filterName = filterTokens.shift()
+	    const effect = modifiers.filters.get(filterName)
+	    if (!effect) {
+	      throw new Error(`There is no filter named: ${filterName}.`)
+	    }
+	    expression.filters.push({effect, argExpressions: filterTokens.map(compileArgExpression)})
 	  }
-	  filters.set(name, handler)
-	  return this
+	  return expression
+	}
+
+	function parseCode (src) {
+	  const tokens = src.match(limiterRegex)
+	  if (tokens.length === 1) {
+	    return rawCompiler.compileCode(tokens[0])
+	  }
+
+	  const code = {
+	    exec: rawCompiler.compileCode(tokens[0]),
+	    limiters: []
+	  }
+	  for (let i = 1; i < tokens.length; i++) {
+	    const limiterTokens = tokens[i].match(argsRegex) || []
+	    const limiterName = limiterTokens.shift()
+	    const effect = modifiers.limiters.get(limiterName)
+	    if (!effect) {
+	      throw new Error(`There is no limiter named: ${limiterName}.`)
+	    }
+	    code.limiters.push({effect, argExpressions: limiterTokens.map(compileArgExpression)})
+	  }
+	  return code
+	}
+
+	function compileArgExpression (argExpression) {
+	  return rawCompiler.compileExpression(argExpression)
 	}
 
 
 /***/ },
-/* 17 */
+/* 21 */
 /***/ function(module, exports) {
 
 	'use strict'
+
+	module.exports = {
+	  compileCode,
+	  compileExpression
+	}
+
+	function compileExpression (src) {
+	  return new Function('context', // eslint-disable-line
+	    `const sandbox = $nxCompileToSandbox(context)
+	    try { with (sandbox) { return ${src} } } catch (err) {
+	      if (!(err instanceof TypeError)) throw err
+	    }`)
+	}
+
+	function compileCode (src) {
+	  return new Function('context', 'tempVars', // eslint-disable-line
+	    `const backup = $nxCompileCreateBackup(context, tempVars)
+	    Object.assign(context, tempVars)
+	    const sandbox = $nxCompileToSandbox(context)
+	    try {
+	      with (sandbox) { ${src} }
+	    } finally {
+	      Object.assign(context, backup)
+	    }`)
+	}
+
+
+/***/ },
+/* 22 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const compiler = __webpack_require__(16)
 
 	const secret = {
 	  handlers: Symbol('event handlers')
 	}
 	const handlerCache = new Map()
-	const handledEvents = new Set()
 
 	function events (elem) {
 	  if (elem.nodeType !== 1) return
@@ -1031,7 +1116,6 @@
 	  }
 	}
 	events.$name = 'events'
-	events.$require = ['code']
 	module.exports = events
 
 	function getEventHandlers (elem) {
@@ -1055,7 +1139,7 @@
 	    const attribute = attributes[i]
 	    if (attribute.name[0] === '#') {
 	      handlers = handlers || new Map()
-	      const handler = elem.$compileCode(attribute.value)
+	      const handler = compiler.compileCode(attribute.value)
 	      const names = attribute.name.slice(1).split(',')
 	      for (let name of names) {
 	        let typeHandlers = handlers.get(name)
@@ -1083,10 +1167,12 @@
 
 
 /***/ },
-/* 18 */
-/***/ function(module, exports) {
+/* 23 */
+/***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
+
+	const compiler = __webpack_require__(16)
 
 	const tokenCache = new Map()
 
@@ -1095,7 +1181,7 @@
 	  createTokens(node).forEach(processToken, node)
 	}
 	interpolate.$name = 'interpolate'
-	interpolate.$require = ['observe', 'expression']
+	interpolate.$require = ['observe']
 	module.exports = interpolate
 
 	function createTokens (node) {
@@ -1122,11 +1208,11 @@
 
 	function processToken (token, index, tokens) {
 	  if (typeof token === 'object') {
-	    const expression = this.$compileExpression(token.expression)
+	    const expression = compiler.compileExpression(token.expression)
 	    if (token.observed) {
 	      this.$observe(interpolateToken, expression, token, tokens)
 	    } else {
-	      interpolateToken.call(this, expression, token, tokens)
+	      this.$queue(interpolateToken, expression, token, tokens)
 	    }
 	  }
 	}
@@ -1188,11 +1274,12 @@
 
 
 /***/ },
-/* 19 */
+/* 24 */
 /***/ function(module, exports) {
 
 	'use strict'
 
+	let cloneId = 0
 	let selectorScope
 	const hostRegex = /:host/g
 	const functionalHostRegex = /:host\((.*?)\)/g
@@ -1224,7 +1311,6 @@
 	      }
 	    }
 	  }
-
 	  render.$name = 'render'
 	  return render
 	}
@@ -1307,9 +1393,9 @@
 	}
 
 	function cacheTemplate (templateHTML) {
-	  const templateDOM = document.createElement('template')
-	  templateDOM.innerHTML = templateHTML
-	  return templateDOM.content
+	  let template = document.createElement('template')
+	  template.innerHTML = templateHTML
+	  return template.content
 	}
 
 	function validateAndCloneConfig (rawConfig) {
@@ -1342,7 +1428,114 @@
 
 
 /***/ },
-/* 20 */
+/* 25 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const dom = __webpack_require__(26)
+
+	const secret = {
+	  showing: Symbol('flow showing'),
+	  prevArray: Symbol('flow prevArray'),
+	  trackBy: Symbol('track by')
+	}
+
+	function flow (elem) {
+	  if (elem.nodeType !== 1) return
+
+	  const hasIf = elem.$hasAttribute('if')
+	  const hasRepeat = elem.$hasAttribute('repeat')
+
+	  if (hasIf && hasRepeat) {
+	    throw new Error('if and repeat attributes can not be used on the same element')
+	  }
+	  if (hasIf || hasRepeat) {
+	    dom.normalizeContent(elem)
+	    dom.extractContent(elem)
+	  }
+
+	  elem.$attribute('if', ifAttribute)
+	  elem.$attribute('track-by', trackByAttribute)
+	  elem.$attribute('repeat', repeatAttribute)
+	}
+	flow.$name = 'flow'
+	flow.$require = ['attributes']
+	module.exports = flow
+
+	function ifAttribute (show) {
+	  if (show && !this[secret.showing]) {
+	    dom.insertContent(this)
+	    this[secret.showing] = true
+	  } else if (!show && this[secret.showing]) {
+	    dom.clearContent(this)
+	    this[secret.showing] = false
+	  }
+	}
+
+	function trackByAttribute (trackBy) {
+	  this[secret.trackBy] = trackBy
+	}
+
+	function repeatAttribute (array) {
+	  const repeatValue = this.getAttribute('repeat-value') || '$value'
+	  const repeatIndex = this.getAttribute('repeat-index') || '$index'
+
+	  let trackBy = this[secret.trackBy] || isSame
+	  let trackByProp
+	  if (typeof trackBy === 'string') {
+	    trackByProp = trackBy
+	    trackBy = isSame
+	  }
+
+	  array = array || []
+	  const prevArray = this[secret.prevArray] = this[secret.prevArray] || []
+
+	  let i = -1
+	  iteration: for (let item of array) {
+	    let prevItem = prevArray[++i]
+
+	    if (prevItem === item) {
+	      continue
+	    }
+	    if (trackBy(item, prevItem, trackByProp)) {
+	      dom.mutateContext(this, i, {[repeatValue]: item})
+	      prevArray[i] = item
+	      continue
+	    }
+	    for (let j = i + 1; j < prevArray.length; j++) {
+	      prevItem = prevArray[j]
+	      if (trackBy(item, prevItem, trackByProp)) {
+	        dom.moveContent(this, j, i, {[repeatIndex]: i})
+	        prevArray.splice(i, 0, prevItem)
+	        prevArray.splice(j, 1)
+	        continue iteration
+	      }
+	    }
+	    dom.insertContent(this, i, {[repeatIndex]: i, [repeatValue]: item})
+	    prevArray.splice(i, 0, item)
+	  }
+
+	  if ((++i) === 0) {
+	    prevArray.length = 0
+	    dom.clearContent(this)
+	  } else {
+	    while (i < prevArray.length) {
+	      dom.removeContent(this)
+	      prevArray.pop()
+	    }
+	  }
+	}
+
+	function isSame (item1, item2, prop) {
+	  return (item1 === item2 ||
+	    (prop && typeof item1 === 'object' && typeof item2 === 'object' &&
+	    item1 && item2 && item1[prop] === item2[prop]))
+	}
+
+
+/***/ },
+/* 26 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1353,39 +1546,35 @@
 	}
 	let cloneId = 0
 
-	function content (elem) {
-	  if (elem.nodeType !== 1) return
-
-	  elem.$extractContent = $extractContent
-	  elem.$insertContent = $insertContent
-	  elem.$moveContent = $moveContent
-	  elem.$removeContent = $removeContent
-	  elem.$clearContent = $clearContent
-	  elem.$mutateContext = $mutateContext
+	module.exports = {
+	  extractContent,
+	  normalizeContent,
+	  insertContent,
+	  moveContent,
+	  removeContent,
+	  clearContent,
+	  mutateContext
 	}
-	content.$name = 'content'
-	module.exports = content
 
-	function $extractContent () {
+	function extractContent (elem) {
 	  const template = document.createDocumentFragment()
-	  let node = this.firstChild
+	  let node = elem.firstChild
 	  while (node) {
 	    template.appendChild(node)
-	    processContent(node)
-	    node = this.firstChild
+	    node = elem.firstChild
 	  }
-	  this[secret.template] = template
-	  this[secret.firstNodes] = []
+	  elem[secret.template] = template
+	  elem[secret.firstNodes] = []
 	  return template
 	}
 
-	function processContent (node) {
+	function normalizeContent (node) {
 	  if (node.nodeType === 1) {
-	    node.setAttribute('clone-id', cloneId++)
+	    node.setAttribute('clone-id', `content-${cloneId++}`)
 	    const childNodes = node.childNodes
 	    let i = childNodes.length
 	    while (i--) {
-	      processContent(childNodes[i])
+	      normalizeContent(childNodes[i])
 	    }
 	  } else if (node.nodeType === 3) {
 	    if (!node.nodeValue.trim()) node.remove()
@@ -1394,23 +1583,23 @@
 	  }
 	}
 
-	function $insertContent (index, contextState) {
+	function insertContent (elem, index, contextState) {
 	  if (index !== undefined && typeof index !== 'number') {
-	    throw new TypeError('first argument must be a number or undefined')
+	    throw new TypeError('Second argument must be a number or undefined.')
 	  }
 	  if (contextState !== undefined && typeof contextState !== 'object') {
-	    throw new TypeError('second argument must be an object or undefined')
+	    throw new TypeError('Third argument must be an object or undefined.')
 	  }
-	  if (!this[secret.template]) {
+	  if (!elem[secret.template]) {
 	    throw new Error('you must extract a template with $extractContent before inserting')
 	  }
-	  const content = this[secret.template].cloneNode(true)
-	  const firstNodes = this[secret.firstNodes]
+	  const content = elem[secret.template].cloneNode(true)
+	  const firstNodes = elem[secret.firstNodes]
 	  const firstNode = content.firstChild
 	  const beforeNode = firstNodes[index]
 
 	  if (contextState) {
-	    contextState = Object.assign(Object.create(this.$state), contextState)
+	    contextState = Object.assign(Object.create(elem.$state), contextState)
 	    let node = firstNode
 	    while (node) {
 	      node.$contextState = contextState
@@ -1418,16 +1607,16 @@
 	    }
 	  }
 
-	  this.insertBefore(content, beforeNode)
+	  elem.insertBefore(content, beforeNode)
 	  if (beforeNode) firstNodes.splice(index, 0, firstNode)
 	  else firstNodes.push(firstNode)
 	}
 
-	function $removeContent (index) {
+	function removeContent (elem, index) {
 	  if (index !== undefined && typeof index !== 'number') {
-	    throw new TypeError('first argument must be a number or undefined')
+	    throw new TypeError('Second argument must be a number or undefined.')
 	  }
-	  const firstNodes = this[secret.firstNodes]
+	  const firstNodes = elem[secret.firstNodes]
 	  index = firstNodes[index] ? index : (firstNodes.length - 1)
 	  const firstNode = firstNodes[index]
 	  const nextNode = firstNodes[index + 1]
@@ -1445,19 +1634,19 @@
 	  else firstNodes.pop()
 	}
 
-	function $clearContent () {
-	  this.innerHTML = ''
-	  this[secret.firstNodes] = []
+	function clearContent (elem) {
+	  elem.innerHTML = ''
+	  elem[secret.firstNodes] = []
 	}
 
-	function $moveContent (fromIndex, toIndex, extraContext) {
+	function moveContent (elem, fromIndex, toIndex, extraContext) {
 	  if (typeof fromIndex !== 'number' || typeof toIndex !== 'number') {
 	    throw new Error('first and second argument must be numbers')
 	  }
 	  if (extraContext !== undefined && typeof extraContext !== 'object') {
 	    throw new Error('third argument must be an object or undefined')
 	  }
-	  const firstNodes = this[secret.firstNodes]
+	  const firstNodes = elem[secret.firstNodes]
 	  const fromNode = firstNodes[fromIndex]
 	  const untilNode = firstNodes[fromIndex + 1]
 	  const toNode = firstNodes[toIndex]
@@ -1466,7 +1655,7 @@
 	  let next
 	  while (node && node !== untilNode) {
 	    next = node.nextSibling
-	    this.insertBefore(node, toNode)
+	    elem.insertBefore(node, toNode)
 	    node = next
 	  }
 	  firstNodes.splice(fromIndex, 1)
@@ -1477,14 +1666,14 @@
 	  }
 	}
 
-	function $mutateContext (index, extraContext) {
+	function mutateContext (elem, index, extraContext) {
 	  if (index !== undefined && typeof index !== 'number') {
 	    throw new TypeError('first argument must be a number or undefined')
 	  }
 	  if (typeof extraContext !== 'object') {
 	    throw new TypeError('second argument must be an object')
 	  }
-	  const startNode = this[secret.firstNodes][index]
+	  const startNode = elem[secret.firstNodes][index]
 	  if (startNode && startNode.$contextState) {
 	    Object.assign(startNode.$contextState, extraContext)
 	  }
@@ -1492,133 +1681,28 @@
 
 
 /***/ },
-/* 21 */
+/* 27 */
 /***/ function(module, exports) {
 
 	'use strict'
 
 	const secret = {
-	  showing: Symbol('flow showing'),
-	  prevArray: Symbol('flow prevArray'),
-	  hasIf: Symbol('has if'),
-	  hasRepeat: Symbol('has repeat')
-	}
-
-	function flow (elem) {
-	  if (elem.nodeType !== 1) return
-
-	  elem.$attribute('if', ifAttribute)
-	  elem.$attribute('repeat', repeatAttribute)
-	}
-	flow.$name = 'flow'
-	flow.$require = ['content', 'attributes']
-	module.exports = flow
-
-	function ifAttribute (show) {
-	  if (this[secret.hasRepeat]) {
-	    throw new Error('You cant use if and repeat on the same node')
-	  }
-	  if (!this[secret.hasIf]) {
-	    this.$extractContent()
-	    this[secret.hasIf] = true
-	  }
-
-	  if (show && !this[secret.showing]) {
-	    this.$insertContent()
-	    this[secret.showing] = true
-	  } else if (!show && this[secret.showing]) {
-	    this.$clearContent()
-	    this[secret.showing] = false
-	  }
-	}
-
-	function repeatAttribute (array) {
-	  if (this[secret.hasIf]) {
-	    throw new Error('You cant use if and repeat on the same node')
-	  }
-	  if (!this[secret.hasRepeat]) {
-	    this.$extractContent()
-	    this[secret.hasRepeat] = true
-	  }
-	  const trackBy = this.getAttribute('track-by')
-	  const repeatValue = this.getAttribute('repeat-value') || '$value'
-	  const repeatIndex = this.getAttribute('repeat-index') || '$index'
-
-	  array = array || []
-	  const prevArray = this[secret.prevArray] = this[secret.prevArray] || []
-
-	  let i = -1
-	  iteration: for (let item of array) {
-	    let prevItem = prevArray[++i]
-
-	    if (prevItem === undefined) {
-	      this.$insertContent(i, {[repeatIndex]: i, [repeatValue]: item})
-	      prevArray[i] = item
-	      continue
-	    }
-	    if (item === prevItem) {
-	      this.$mutateContext(i, {[repeatIndex]: i})
-	      continue
-	    }
-	    if (trackBy === repeatIndex) {
-	      this.$mutateContext(i, {[repeatValue]: item})
-	      prevArray[i] = item
-	      continue
-	    }
-	    if (trackBy && isTrackBySame(item, prevItem, trackBy)) {
-	      this.$mutateContext(i, {[repeatIndex]: i})
-	      continue
-	    }
-	    for (let j = i + 1; j < prevArray.length; j++) {
-	      prevItem = prevArray[j]
-	      if (item === prevItem || (trackBy && isTrackBySame(item, prevItem, trackBy))) {
-	        this.$moveContent(j, i, {[repeatIndex]: i})
-	        prevArray.splice(i, 0, prevItem)
-	        prevArray.splice(j, 1)
-	        continue iteration
-	      }
-	    }
-	    this.$insertContent(i, {[repeatIndex]: i, [repeatValue]: item})
-	    prevArray.splice(i, 0, item)
-	  }
-
-	  if ((++i) === 0) {
-	    prevArray.length = 0
-	    this.$clearContent()
-	  } else {
-	    while (i < prevArray.length) {
-	      this.$removeContent()
-	      prevArray.pop()
-	    }
-	  }
-	}
-
-	function isTrackBySame (item1, item2, trackBy) {
-	  return (typeof item1 === 'object' && typeof item2 === 'object' &&
-	  item1 && item2 && item1[trackBy] === item2[trackBy])
-	}
-
-
-/***/ },
-/* 22 */
-/***/ function(module, exports) {
-
-	'use strict'
-
-	const secret = {
-	  params: Symbol('bindable params'),
-	  binder: Symbol('bindable binder')
+	  bound: Symbol('bound element'),
+	  params: Symbol('bind params'),
+	  bindEvents: Symbol('bind events'),
+	  signal: Symbol('observing signal'),
+	  preventSubmit: Symbol('prevent submit')
 	}
 	const paramsRegex = /\S+/g
 	const defaultParams = {mode: 'two-way', on: 'change', type: 'string'}
 
 	function onInput (ev) {
-	  const params = ev.target[secret.params]
+	  const elem = ev.target
+	  const params = elem[secret.params]
 	  if (ev.type === 'submit') {
-	    syncStateWithForm(ev.target)
-	    ev.preventDefault()
-	  } else if (params && (params.on.indexOf(ev.type) !== -1)) {
-	    syncStateWithElement(ev.target)
+	    syncStateWithForm(elem)
+	  } else if (elem[secret.bound] && params.on.indexOf(ev.type) !== -1) {
+	    syncStateWithElement(elem)
 	  }
 	}
 
@@ -1627,68 +1711,76 @@
 
 	  elem.$bindable = $bindable
 	  next()
-
-	  if (elem[secret.params]) {
-	    elem[secret.binder] = syncElementWithState.bind(null, elem)
-	    elem.$attribute('bind', bindAttribute)
-	  }
+	  elem.$attribute('bind', bindAttribute)
 	}
 	bindable.$name = 'bindable'
 	bindable.$require = ['observe', 'attributes']
 	module.exports = bindable
 
 	function $bindable (params) {
-	  if (typeof params !== 'object') params = {}
 	  this[secret.params] = Object.assign({}, defaultParams, params)
 	}
 
-	function bindAttribute (params) {
-	  if (typeof params === 'string') {
-	    const tokens = params.match(paramsRegex)
-	    params = {}
-	    if (tokens) {
-	      if (tokens[0]) params.mode = tokens[0]
-	      if (tokens[1]) params.on = tokens[1].split(',')
-	      if (tokens[2]) params.type = tokens[2]
+	function bindAttribute (newParams) {
+	  const params = this[secret.params]
+
+	  if (params) {
+	    if (newParams && typeof newParams === 'string') {
+	      const tokens = newParams.match(paramsRegex)
+	      params.mode = tokens[0] || params.mode,
+	      params.on = tokens[1] ? tokens[1].split(',') : params.on,
+	      params.type = tokens[2] || params.type
+	    } else if (newParams && typeof newParams === 'object') {
+	      Object.assign(params, newParams)
 	    }
+	    if (!Array.isArray(params.on)) {
+	      params.on = [params.on]
+	    }
+	    bindElement(this)
+	    this[secret.bound] = true
 	  }
-	  if (typeof params === 'object') {
-	    Object.assign(this[secret.params], params)
-	  }
-	  if (!Array.isArray(this[secret.params].on)) {
-	    this[secret.params].on = [this[secret.params].on]
-	  }
-	  bindElement(this)
 	}
 
 	function bindElement (elem) {
 	  const params = elem[secret.params]
-	  const binder = elem[secret.binder]
-	  let signal
-	  if (params.mode === 'two-way') {
-	    signal = elem.$observe(binder)
-	    Promise.resolve().then(binder)
+	  if (params.mode === 'two-way' && !elem[secret.signal]) {
+	    Promise.resolve().then(() => elem[secret.signal] = elem.$observe(syncElementWithState, elem))
 	  } else if (params.mode === 'one-time') {
-	    elem.$unobserve(signal)
-	    Promise.resolve().then(binder)
+	    elem.$unobserve(elem[secret.signal])
+	    Promise.resolve().then(() => elem.$queue(syncElementWithState, elem))
+	    elem[secret.signal] = undefined
 	  } else if (params.mode === 'one-way') {
-	    elem.$unobserve(signal)
-	  } else {
-	    throw new TypeError('bind mode must be two-way, one-time or one-way')
+	    elem.$unobserve(elem[secret.signal])
+	    elem[secret.signal] = undefined
+	  }
+	  registerListeners(elem, params)
+	}
+
+	function registerListeners (elem, params) {
+	  const root = elem.$root
+	  let bindEvents = root[secret.bindEvents]
+	  if (!bindEvents) {
+	    bindEvents = root[secret.bindEvents] = new Set()
+	  }
+	  if (!root[secret.preventSubmit]) {
+	    root.addEventListener('submit', preventDefault, true)
+	    root[secret.preventSubmit] = true
 	  }
 	  for (let eventName of params.on) {
-	    // delegate to the nearest root (shadow or document)
-	    while (elem.parentNode) {
-	      elem = elem.parentNode
+	    if (!bindEvents.has(eventName)) {
+	      root.addEventListener(eventName, onInput, true)
+	      bindEvents.add(eventName)
 	    }
-	    elem.addEventListener(eventName, onInput, true)
 	  }
 	}
 
+	function preventDefault (ev) {
+	  ev.preventDefault()
+	}
+
 	function syncElementWithState (elem) {
-	  const state = elem.$state
 	  const params = elem[secret.params]
-	  const value = getValue(state, elem.name)
+	  const value = getValue(elem.$state, elem.name)
 	  if (elem.type === 'radio' || elem.type === 'checkbox') {
 	    elem.checked = (value === toType(elem.value, params.type))
 	  } else if (elem.value !== toType(value)) {
@@ -1697,13 +1789,12 @@
 	}
 
 	function syncStateWithElement (elem) {
-	  const state = elem.$state
 	  const params = elem[secret.params]
 	  if (elem.type === 'radio' || elem.type === 'checkbox') {
 	    const value = elem.checked ? toType(elem.value, params.type) : undefined
-	    setValue(state, elem.name, value)
+	    setValue(elem.$state, elem.name, value)
 	  } else {
-	    setValue(state, elem.name, toType(elem.value, params.type))
+	    setValue(elem.$state, elem.name, toType(elem.value, params.type))
 	  }
 	}
 
@@ -1712,31 +1803,27 @@
 	}
 
 	function syncStateWithFormControl (elem) {
-	  const params = elem[secret.params]
-	  if (params && (params.on.indexOf('submit') !== -1)) {
-	    syncStateWithElement(elem)
+	  if (elem[secret.bound]) {
+	    const params = elem[secret.params]
+	    if (params.on.indexOf('submit') !== -1) {
+	      syncStateWithElement(elem)
+	    }
 	  }
 	}
 
 	function toType (value, type) {
 	  if (value === '') return undefined
 	  if (value === undefined) return ''
-
 	  if (type === 'string') return String(value)
 	  else if (type === 'number') return Number(value)
 	  else if (type === 'boolean') return Boolean(value)
 	  else if (type === 'date') return new Date(value)
-	  else if (type !== undefined) {
-	    throw new TypeError('bind type must be string, number, boolean or date')
-	  }
-
 	  return value
 	}
 
 	function getValue (state, name) {
 	  const tokens = name.split('.')
 	  let value = state
-
 	  for (let token of tokens) {
 	    value = value[token]
 	  }
@@ -1747,7 +1834,6 @@
 	  const tokens = name.split('.')
 	  const propName = tokens.pop()
 	  let parent = state
-
 	  for (let token of tokens) {
 	    parent = parent[token]
 	  }
@@ -1756,33 +1842,33 @@
 
 
 /***/ },
-/* 23 */
+/* 28 */
 /***/ function(module, exports) {
 
 	'use strict'
 
 	function bind (elem) {
-	  if (!isInput(elem)) return
+	  if (!elem.nodeType === 1) return
 
-	  elem.$bindable({
-	    mode: 'two-way',
-	    on: getTrigger(elem),
-	    type: getType(elem)
-	  })
+	  if (isInput(elem)) {
+	    elem.$bindable({
+	      mode: 'two-way',
+	      on: elem.form ? 'submit' : 'change',
+	      type: getType(elem)
+	    })
+	  }
 	}
 	bind.$name = 'bind'
 	bind.$require = ['bindable']
 	module.exports = bind
 
 	function isInput (elem) {
-	  if (elem instanceof HTMLInputElement) return true
-	  if (elem instanceof HTMLTextAreaElement) return true
-	  if (elem instanceof HTMLSelectElement) return true
-	  return false
+	  const tagName = elem.tagName
+	  return (tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA')
 	}
 
 	function getType (elem) {
-	  if (elem instanceof HTMLInputElement) {
+	  if (elem.tagName === 'INPUT') {
 	    if (elem.type === 'checkbox') {
 	      return 'boolean'
 	    }
@@ -1799,16 +1885,9 @@
 	  return 'string'
 	}
 
-	function getTrigger (elem) {
-	  if (elem.form && elem.form instanceof HTMLFormElement) {
-	    return 'submit'
-	  }
-	  return 'change'
-	}
-
 
 /***/ },
-/* 24 */
+/* 29 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1847,7 +1926,7 @@
 
 
 /***/ },
-/* 25 */
+/* 30 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -1856,12 +1935,12 @@
 	  entering: Symbol('during entering animation'),
 	  leaving: Symbol('during leaving animation'),
 	  moveTransition: Symbol('watch move transition'),
-	  position: Symbol('animated element position')
+	  position: Symbol('animated element position'),
+	  parent: Symbol('parent node of leaving node'),
+	  listening: Symbol('listening for animationend')
 	}
 	const watchedNodes = new Set()
 	let checkQueued = false
-
-	// window.addEventListener('animationend', onAnimationEnd, true)
 
 	function onAnimationEnd (ev) {
 	  const elem = ev.target
@@ -1869,8 +1948,8 @@
 	    elem.remove()
 	  }
 	  if (elem[secret.entering]) {
-	    elem[secret.entering] = false
 	    elem.style.animation = ''
+	    elem[secret.entering] = false
 	  }
 	}
 
@@ -1891,51 +1970,65 @@
 	function enterAttribute (animation) {
 	  if (this[secret.entering] !== false) {
 	    this[secret.entering] = true
-	    if (typeof animation === 'object' && animation !== null) {
-	      this.style.animation = animationObjectToString(animation)
+	    if (typeof animation === 'object' && animation) {
+	      animation = animationObjectToString(animation)
 	    } else if (typeof animation === 'string') {
-	      this.style.animation = animation
+	      animation = animation
 	    }
+	    this.style.animation = animation
 	    setAnimationDefaults(this)
+	    registerListener(this)
 	  }
 	}
 
 	function leaveAttribute (animation) {
-	  const parent = this.parentNode || this.host
-	  watchedNodes.add(this)
-	  this.$cleanup(unwatch)
-	  this.$cleanup(() => {
-	    this[secret.leaving] = true
-	    if (typeof animation === 'object' && animation !== null) {
-	      this.style.animation = animationObjectToString(animation)
-	    } else if (typeof animation === 'string') {
-	      this.style.animation = animation
-	    }
-	    setAnimationDefaults(this)
-	    parent.appendChild(this)
-	    if (shouldAbsolutePosition(this)) {
-	      toAbsolutePosition(this)
-	    }
-	  })
-	  // not optimal, fix this with performance batch
-	  let root = this
-	  while (root.parentNode) {
-	    root = root.parentNode
+	  if (!this[secret.parent]) {
+	    watchedNodes.add(this)
+	    this.$cleanup(unwatch)
+	    this.$cleanup(onLeave, animation)
+	    this[secret.parent] = this.parentNode
+	    registerListener(this)
 	  }
-	  root.addEventListener('animationend', onAnimationEnd, true)
+	}
+
+	function registerListener (elem) {
+	  const root = elem.$root
+	  if (!root[secret.listening]) {
+	    root.addEventListener('animationend', onAnimationEnd, true)
+	    root[secret.listening] = true
+	  }
+	}
+
+	function onLeave (animation) {
+	  this[secret.leaving] = true
+	  if (typeof animation === 'object' && animation) {
+	    animation = animationObjectToString(animation)
+	  } else if (typeof animation === 'string') {
+	    animation = animation
+	  }
+	  this.style.animation = animation
+	  setAnimationDefaults(this)
+
+	  this[secret.parent].appendChild(this)
+	  if (shouldAbsolutePosition(this)) {
+	    toAbsolutePosition(this)
+	  }
 	}
 
 	function moveAttribute (transition) {
-	  this[secret.moveTransition] = true
-	  watchedNodes.add(this)
-	  this.$cleanup(unwatch)
-	  if (typeof transition === 'object' && transition !== null) {
-	    this.style.transition = transitionObjectToString(transition)
-	  } else if (typeof transition === 'string') {
-	    this.style.transition = 'transform ' + transition
-	  } else {
-	    this.style.transition = 'transform'
+	  if (!this[secret.moveTransition]) {
+	    watchedNodes.add(this)
+	    this.$cleanup(unwatch)
+	    this[secret.moveTransition] = true
 	  }
+	  if (typeof transition === 'object' && transition) {
+	    transition = 'transform ' + transitionObjectToString(transition)
+	  } else if (typeof transition === 'string') {
+	    transition = 'transform ' + transition
+	  } else {
+	    transition = 'transform'
+	  }
+	  this.style.transition = transition
 	  setTransitionDefaults(this)
 	}
 
@@ -1952,7 +2045,6 @@
 
 	function checkWatchedNodes () {
 	  for (let elem of watchedNodes) {
-	    const rect = elem.getBoundingClientRect() || {}
 	    const position = {
 	      left: elem.offsetLeft,
 	      top: elem.offsetTop
@@ -1970,19 +2062,20 @@
 	}
 
 	function onMove (elem, xDiff, yDiff) {
-	  const transition = elem.style.transition
-	  elem.style.transition = ''
-	  elem.style.transform = `translate3d(${xDiff}px, ${yDiff}px, 0)`
+	  const style = elem.style
+	  const transition = style.transition
+	  style.transition = ''
+	  style.transform = `translate3d(${xDiff}px, ${yDiff}px, 0)`
 	  requestAnimationFrame(() => {
-	    elem.style.transition = transition
-	    elem.style.transform = ''
+	    style.transition = transition
+	    style.transform = ''
 	  })
 	}
 
 	function animationObjectToString (animation) {
 	  return [
 	    animation.name,
-	    timeToString(animation.duration) || '1s',
+	    timeToString(animation.duration),
 	    animation.timingFunction,
 	    timeToString(animation.delay),
 	    animation.iterationCount,
@@ -2002,31 +2095,29 @@
 
 	function setAnimationDefaults (elem) {
 	  const style = elem.style
-	  if (style.animationDuration === 'initial' || style.animationDuration === '' || style.animationDuration === '0s') {
-	    elem.style.animationDuration = '1s'
+	  const duration = style.animationDuration
+	  const fillMode = style.animationFillMode
+	  if (duration === 'initial' || duration === '' || duration === '0s') {
+	    style.animationDuration = '1s'
 	  }
-	  if (style.animationFillMode === 'initial' || style.animationFillMode === '' || style.animationFillMode === 'none') {
+	  if (fillMode === 'initial' || fillMode === '' || fillMode === 'none') {
 	    style.animationFillMode = 'both'
 	  }
 	}
 
 	function setTransitionDefaults (elem) {
 	  const style = elem.style
-	  if (style.transitionDuration === 'initial' || style.transitionDuration === '' || style.transitionDuration === '0s') {
+	  const duration = style.transitionDuration
+	  if (duration === 'initial' || duration === '' || duration === '0s') {
 	    style.transitionDuration = '1s'
 	  }
 	}
 
 	function shouldAbsolutePosition (elem) {
-	  elem = elem.parentNode || elem.host
-	  while (elem) {
-	    if (elem[secret.leaving]) {
-	      return false
-	    }
-	    if (elem.$root) {
-	      return true
-	    }
-	    elem = elem.parentNode || elem.host
+	  elem = elem.parentNode
+	  while (elem && elem !== elem.$root) {
+	    if (elem[secret.leaving]) return false
+	    elem = elem.parentNode
 	  }
 	  return true
 	}
@@ -2036,29 +2127,24 @@
 	  const position = elem[secret.position]
 	  style.left = `${position.left}px`
 	  style.top = `${position.top}px`
-	  style.width = `${elem.offsetWidth + 1}px` // it always rounds downwards
-	  style.height = `${elem.offsetHeight + 1}px` // it always rounds downwards
 	  style.margin = '0'
-	  style.boxSizing = 'border-box'
+	  style.width = '-moz-max-content'
+	  style.width = '-webkit-max-content'
+	  style.width = 'max-content'
 	  style.position = 'absolute'
 	}
 
 	function timeToString (time) {
-	  if (typeof time === 'number') {
-	    return time + 'ms'
-	  }
-	  return time
+	  return (typeof time === 'number') ? time + 'ms' : time
 	}
 
 	function boolToPlayState (bool) {
-	  if (bool === false || bool === 'paused') {
-	    return 'paused'
-	  }
+	  return (bool === false || bool === 'paused') ? 'paused' : 'running'
 	}
 
 
 /***/ },
-/* 26 */
+/* 31 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2067,6 +2153,7 @@
 	  config: Symbol('router config')
 	}
 	const rootRouters = new Set()
+	let cloneId = 0
 
 	window.addEventListener('popstate', onPopState, true)
 
@@ -2095,13 +2182,18 @@
 	  const parentRouter = findParentRouter(router)
 	  if (parentRouter) {
 	    router.$routerLevel = parentRouter.$routerLevel + 1
-	    parentRouter[secret.config].children.add(router)
-	    router.$cleanup(() => parentRouter[secret.config].children.delete(router))
+	    const siblingRouters = parentRouter[secret.config].children
+	    siblingRouters.add(router)
+	    router.$cleanup(cleanupRouter, siblingRouters)
 	  } else {
 	    router.$routerLevel = 1
 	    rootRouters.add(router)
-	    router.$cleanup(() => rootRouters.delete(router))
+	    router.$cleanup(cleanupRouter, rootRouters)
 	  }
+	}
+
+	function cleanupRouter (siblingRouters) {
+	  siblingRouters.delete(this)
 	}
 
 	function absoluteToRelativeRoute (router, route) {
@@ -2109,32 +2201,33 @@
 	}
 
 	function extractViews (router) {
-	  let view
-	  while (router.firstChild) {
-	    view = router.firstChild
-	    if (view instanceof Element && view.hasAttribute('route')) {
-	      router[secret.config].templates.set(view.getAttribute('route'), view)
-	      if (view.hasAttribute('default-route')) {
-	        router[secret.config].defaultView = view.getAttribute('route')
+	  let child = router.firstChild
+	  while (child) {
+	    if (child.nodeType === 1 && child.hasAttribute('route')) {
+	      const route = child.getAttribute('route')
+	      router[secret.config].templates.set(route, child)
+	      if (child.hasAttribute('default-route')) {
+	        router[secret.config].defaultView = route
 	      }
 	    }
-	    view.remove()
+	    child.remove()
+	    child = router.firstChild
 	  }
 	}
 
 	function findParentRouter (node) {
-	  while (node.parentNode) {
+	  node = node.parentNode
+	  while (node && node.$routerLevel === undefined) {
 	    node = node.parentNode
-	    if (node.$routerLevel !== undefined) {
-	      return node
-	    }
 	  }
+	  return node
 	}
 
 	function routeRouterAndChildren (router, route) {
 	  route = route.slice()
-	  const templates = router[secret.config].templates
-	  const defaultView = router[secret.config].defaultView
+	  const config = router[secret.config]
+	  const templates = config.templates
+	  const defaultView = config.defaultView
 	  const prevView = router.$currentView
 	  let nextView = route.shift()
 
@@ -2163,11 +2256,8 @@
 	}
 
 	function routeRouter (router, nextView) {
+	  router.innerHTML = ''
 	  const template = router[secret.config].templates.get(nextView)
-
-	  while (router.firstChild) {
-	    router.firstChild.remove()
-	  }
 	  if (template) {
 	    router.appendChild(document.importNode(template, true))
 	  }
@@ -2181,25 +2271,24 @@
 
 
 /***/ },
-/* 27 */
+/* 32 */
 /***/ function(module, exports) {
 
 	'use strict'
 
 	const secret = {
-	  config: Symbol('params sync config')
+	  config: Symbol('params sync config'),
+	  initSynced: Symbol('node initial synced')
 	}
-	const nodesToSync = new Set()
+	const watchedNodes = new Set()
 
 	window.addEventListener('popstate', onPopState)
 
 	function onPopState (ev) {
-	  for (let node of nodesToSync) {
+	  for (let node of watchedNodes) {
 	    if (document.body.contains(node)) { // TODO -> refine this a bit! I need a better check
-	      const state = node.$state
-	      const config = node[secret.config]
-	      syncStateWithParams(state, history.state.params, config)
-	      syncParamsWithState(history.state.params, state, config, false)
+	      syncStateWithParams(node)
+	      syncParamsWithState(node, false)
 	    }
 	  }
 	}
@@ -2207,48 +2296,54 @@
 	module.exports = function paramsFactory (config) {
 	  function params (node, state, next) {
 	    node[secret.config] = config
-	    nodesToSync.add(node)
-	    node.$cleanup(() => nodesToSync.delete(node))
+	    watchedNodes.add(node)
+	    node.$cleanup(unwatch)
 
-	    syncStateWithParams(state, history.state.params, config)
-
+	    syncStateWithParams(node)
 	    next()
-
-	    syncParamsWithState(history.state.params, state, config, false)
-	    node.$observe(() => syncParamsWithState(history.state.params, state, config, true))
+	    syncParamsWithState(node, false)
+	    node.$observe(syncParamsWithState, node, true)
 	  }
 	  params.$name = 'params'
 	  params.$require = ['observe']
 	  return params
 	}
 
-	function syncStateWithParams (state, params, config) {
+	function unwatch () {
+	  watchedNodes.delete(this)
+	}
+
+	function syncStateWithParams (node) {
+	  const params = history.state.params
+	  const state = node.$state
+	  const config = node[secret.config]
+
 	  for (let paramName in config) {
 	    const param = params[paramName] || config[paramName].default
-	    const type = config[paramName].type
-
 	    if (config[paramName].required && param === undefined) {
 	      throw new Error(`${paramName} is a required parameter`)
 	    }
+	    const type = config[paramName].type
 	    if (state[paramName] !== param) {
 	      if (param === undefined) {
 	        state[paramName] = undefined
 	      } else if (type === 'number') {
 	        state[paramName] = Number(param)
-	      } else if (type === 'string') {
-	        state[paramName] = String(param)
 	      } else if (type === 'boolean') {
 	        state[paramName] = Boolean(param)
 	      } else if (type === 'date') {
 	        state[paramName] = new Date(param)
 	      } else {
-	        state[paramName] = param
+	        state[paramName] = decodeURI(param)
 	      }
 	    }
 	  }
 	}
 
-	function syncParamsWithState (params, state, config, shouldUpdateHistory) {
+	function syncParamsWithState (node, shouldUpdateHistory) {
+	  const params = history.state.params
+	  const state = node.$state
+	  const config = node[secret.config]
 	  let newParams = {}
 	  let paramsChanged = false
 	  let historyChanged = false
@@ -2282,14 +2377,11 @@
 	}
 
 	function paramsToQuery (params) {
-	  if (params === undefined) {
-	    params = {}
-	  }
-
 	  let query = ''
-	  for (let param in params) {
-	    if (params[param] !== undefined) {
-	      query += `${param}=${params[param]}&`
+	  for (let paramName in params) {
+	    const param = params[paramName]
+	    if (param !== undefined) {
+	      query += `${paramName}=${param}&`
 	    }
 	  }
 	  if (query !== '') {
@@ -2300,7 +2392,7 @@
 
 
 /***/ },
-/* 28 */
+/* 33 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2315,7 +2407,7 @@
 	  if (elem.nodeType !== 1) return
 
 	  elem.$route = $route
-	  if (elem instanceof HTMLAnchorElement) {
+	  if (elem.tagName === 'A') {
 	    elem.$attribute('iref', irefAttribute)
 	    elem.$attribute('iref-params', irefParamsAttribute)
 	    elem.$attribute('iref-options', irefOptionsAttribute)
@@ -2326,24 +2418,21 @@
 	module.exports = ref
 
 	function irefAttribute (path) {
-	  this[secret.config] = this[secret.config] || {}
-	  const config = this[secret.config]
+	  const config = this[secret.config] = this[secret.config] || {}
 	  config.path = path
 
 	  let route = pathToRoute(path)
-	  route = route.some(filterRelativeTokens) ? relativeToAbsoluteRoute(this, route) : route
-	  const href =  routeToPath(route) + (this.search || '')
-	  this.setAttribute('href', href)
+	  if (route.some(filterRelativeTokens)) {
+	    route = relativeToAbsoluteRoute(this, route)
+	  }
+	  this.href = routeToPath(route) + (this.search || '')
 	  this.addEventListener('click', onClick, true)
 	}
 
 	function irefParamsAttribute (params) {
-	  this[secret.config] = this[secret.config] || {}
-	  const config = this[secret.config]
+	  const config = this[secret.config] = this[secret.config] || {}
 	  config.params = params
-
-	  const href = (this.pathname || '') + paramsToQuery(params)
-	  this.setAttribute('href', href)
+	  this.href = (this.pathname || '') + paramsToQuery(params)
 	  this.addEventListener('click', onClick, true)
 	}
 
@@ -2356,17 +2445,13 @@
 	}
 
 	function irefOptionsAttribute (options) {
-	  this[secret.config] = this[secret.config] || {}
-	  this[secret.config].options = options
+	  const config = this[secret.config] = this[secret.config] || {}
+	  config.options = options
 	}
 
 	function $route (path, params, options) {
-	  if (params === undefined) {
-	    params = {}
-	  }
-	  if (options === undefined) {
-	    options = {}
-	  }
+	  params = params || {}
+	  options = options || {}
 	  let route = pathToRoute(path)
 	  if (route.some(filterRelativeTokens)) {
 	    route = relativeToAbsoluteRoute(this, route)
@@ -2409,12 +2494,10 @@
 
 	function findParentRouter (node) {
 	  node = node.parentNode
-	  while (node) {
-	    if (node.$routerLevel !== undefined) {
-	      return node
-	    }
+	  while (node && node.$routerLevel === undefined) {
 	    node = node.parentNode
 	  }
+	  return node
 	}
 
 	function updateHistory (route, params, options) {
@@ -2434,28 +2517,20 @@
 	}
 
 	function routeToPath (route) {
-	  if (route === undefined) {
-	    route = []
-	  }
-	  return '/' + route.join('/')
+	  return route ? '/' + route.join('/') : ''
 	}
 
 	function pathToRoute (path) {
-	  if (path.charAt(0) === '/') {
-	    path = path.slice(1)
-	  }
 	  return path.split('/').filter(filterEmptyTokens)
 	}
 
 	function paramsToQuery (params) {
-	  if (params === undefined) {
-	    params = {}
-	  }
-
+	  params = params || {}
 	  let query = ''
-	  for (let param in params) {
-	    if (params[param] !== undefined) {
-	      query += `${param}=${params[param]}&`
+	  for (let paramName in params) {
+	    const param = params[paramName]
+	    if (param !== undefined) {
+	      query += `${paramName}=${param}&`
 	    }
 	  }
 	  if (query !== '') {
@@ -2465,7 +2540,7 @@
 	}
 
 	function queryToParams (query) {
-	  if (query.charAt(0) === '?') {
+	  if (query[0] === '?') {
 	    query = query.slice(1)
 	  }
 	  query = query.split('&')
@@ -2482,56 +2557,71 @@
 
 
 /***/ },
-/* 29 */
+/* 34 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const observer = __webpack_require__(30)
+	const observer = __webpack_require__(35)
 
 	function observe (node, state) {
 	  node.$contextState = observer.observable(node.$contextState)
 	  node.$state = observer.observable(node.$state)
 
 	  node.$observe = $observe
+	  node.$queue = $queue
 	  node.$unobserve = observer.unobserve
 	}
 	observe.$name = 'observe'
 	module.exports = observe
 
 	function $observe (fn, ...args) {
-	  if (typeof fn !== 'function') {
-	    throw new TypeError('first argument must be a function')
-	  }
 	  args.unshift(fn, this)
 	  const signal = observer.observe.apply(null, args)
 	  this.$cleanup(observer.unobserve, signal)
 	  return signal
 	}
 
+	function $queue (fn, ...args) {
+	  args.unshift(fn, this)
+	  return observer.queue.apply(null, args)
+	}
+
 
 /***/ },
-/* 30 */
+/* 35 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const nextTick = __webpack_require__(31)
+	module.exports = __webpack_require__(36)
+
+
+/***/ },
+/* 36 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const nextTick = __webpack_require__(37)
+	const builtIns = __webpack_require__(38)
+	const wellKnowSymbols = __webpack_require__(43)
 
 	const proxies = new WeakMap()
 	const observers = new WeakMap()
 	const queuedObservers = new Set()
+	const enumerate = Symbol('enumerate')
 	let queued = false
 	let currentObserver
+	const handlers = {get, ownKeys, set, deleteProperty}
 
 	module.exports = {
 	  observe,
 	  unobserve,
+	  queue,
 	  observable,
 	  isObservable
 	}
-
-	const handlers = {get, set, deleteProperty}
 
 	function observe (fn, context, ...args) {
 	  if (typeof fn !== 'function') {
@@ -2539,15 +2629,27 @@
 	  }
 	  args = args.length ? args : undefined
 	  const observer = {fn, context, args, observedKeys: []}
-	  runObserver(observer)
+	  queueObserver(observer)
 	  return observer
 	}
 
 	function unobserve (observer) {
-	  if (typeof observer === 'object' && observer.observedKeys) {
-	    observer.observedKeys.forEach(unobserveKey, observer)
+	  if (typeof observer === 'object') {
+	    if (observer.observedKeys) {
+	      observer.observedKeys.forEach(unobserveKey, observer)
+	    }
 	    observer.fn = observer.context = observer.args = observer.observedKeys = undefined
 	  }
+	}
+
+	function queue (fn, context, ...args) {
+	  if (typeof fn !== 'function') {
+	    throw new TypeError('first argument must be a function')
+	  }
+	  args = args.length ? args : undefined
+	  const observer = {fn, context, args, once: true}
+	  queueObserver(observer)
+	  return observer
 	}
 
 	function observable (obj) {
@@ -2559,7 +2661,15 @@
 	}
 
 	function toObservable (obj) {
-	  const observable = new Proxy(obj, handlers)
+	  let observable
+	  const builtIn = builtIns.get(obj.constructor)
+	  if (typeof builtIn === 'function') {
+	    observable = builtIn(obj, registerObserver, queueObservers)
+	  } else if (!builtIn) {
+	    observable = new Proxy(obj, handlers)
+	  } else {
+	    observable = obj
+	  }
 	  proxies.set(obj, observable)
 	  proxies.set(observable, observable)
 	  observers.set(obj, new Map())
@@ -2576,47 +2686,64 @@
 	function get (target, key, receiver) {
 	  if (key === '$raw') return target
 	  const result = Reflect.get(target, key, receiver)
-	  if (typeof key === 'symbol' || typeof result === 'function') {
+	  if (typeof key === 'symbol' && wellKnowSymbols.has(key)) {
 	    return result
 	  }
-	  const isObject = (typeof result === 'object' && result !== null)
+	  const isObject = (typeof result === 'object' && result)
 	  const observable = isObject && proxies.get(result)
 	  if (currentObserver) {
-	    registerObserver(target, key, currentObserver)
-	    if (isObject && result.constructor !== Date) {
+	    registerObserver(target, key)
+	    if (isObject) {
 	      return observable || toObservable(result)
 	    }
 	  }
 	  return observable || result
 	}
 
-	function registerObserver (target, key, observer) {
-	  const observersForTarget = observers.get(target)
-	  let observersForKey = observersForTarget.get(key)
-	  if (!observersForKey) {
-	    observersForKey = new Set()
-	    observersForTarget.set(key, observersForKey)
-	  }
-	  if (!observersForKey.has(observer)) {
-	    observersForKey.add(observer)
-	    observer.observedKeys.push(observersForKey)
+	function registerObserver (target, key) {
+	  if (currentObserver) {
+	    const observersForTarget = observers.get(target)
+	    let observersForKey = observersForTarget.get(key)
+	    if (!observersForKey) {
+	      observersForKey = new Set()
+	      observersForTarget.set(key, observersForKey)
+	    }
+	    if (!observersForKey.has(currentObserver)) {
+	      observersForKey.add(currentObserver)
+	      currentObserver.observedKeys.push(observersForKey)
+	    }
 	  }
 	}
 
+	function ownKeys (target) {
+	  registerObserver(target, enumerate)
+	  return Reflect.ownKeys(target)
+	}
+
 	function set (target, key, value, receiver) {
-	  const observersForKey = observers.get(target).get(key)
-	  if (observersForKey) {
-	    observersForKey.forEach(queueObserver)
+	  if (key === 'length' || value !== Reflect.get(target, key, receiver)) {
+	    queueObservers(target, key)
+	    queueObservers(target, enumerate)
+	  }
+	  if (typeof value === 'object' && value) {
+	    value = value.$raw || value
 	  }
 	  return Reflect.set(target, key, value, receiver)
 	}
 
 	function deleteProperty (target, key) {
+	  if (Reflect.has(target, key)) {
+	    queueObservers(target, key)
+	    queueObservers(target, enumerate)
+	  }
+	  return Reflect.deleteProperty(target, key)
+	}
+
+	function queueObservers (target, key) {
 	  const observersForKey = observers.get(target).get(key)
 	  if (observersForKey) {
 	    observersForKey.forEach(queueObserver)
 	  }
-	  return Reflect.deleteProperty(target, key)
 	}
 
 	function queueObserver (observer) {
@@ -2635,11 +2762,16 @@
 
 	function runObserver (observer) {
 	  if (observer.fn) {
-	    try {
-	      currentObserver = observer
+	    if (observer.once) {
 	      observer.fn.apply(observer.context, observer.args)
-	    } finally {
-	      currentObserver = undefined
+	      unobserve(observer)
+	    } else {
+	      try {
+	        currentObserver = observer
+	        observer.fn.apply(observer.context, observer.args)
+	      } finally {
+	        currentObserver = undefined
+	      }
 	    }
 	  }
 	}
@@ -2650,13 +2782,23 @@
 
 
 /***/ },
-/* 31 */
+/* 37 */
 /***/ function(module, exports) {
 
 	'use strict'
 
+	let promise = Promise.resolve()
 	let mutateWithTask
 	let currTask
+
+	module.exports = function nextTick (task) {
+	  currTask = task
+	  if (mutateWithTask) {
+	    mutateWithTask()
+	  } else {
+	    promise = promise.then(task)
+	  }
+	}
 
 	if (typeof MutationObserver !== 'undefined') {
 	  let counter = 0
@@ -2664,62 +2806,307 @@
 	  const textNode = document.createTextNode(String(counter))
 	  observer.observe(textNode, {characterData: true})
 
-	  function onTask () {
-	    if (currTask) {
-	      currTask()
-	    }
-	  }
-
 	  mutateWithTask = function mutateWithTask () {
 	    counter = (counter + 1) % 2
 	    textNode.textContent = counter
 	  }
 	}
 
-	module.exports = function nextTick (task) {
-	  currTask = task
-	  if (mutateWithTask) {
-	    mutateWithTask()
-	  } else {
-	    Promise.resolve().then(task)
+	function onTask () {
+	  if (currTask) {
+	    currTask()
 	  }
 	}
 
 
 /***/ },
-/* 32 */
+/* 38 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const MapShim = __webpack_require__(39)
+	const SetShim = __webpack_require__(40)
+	const WeakMapShim = __webpack_require__(41)
+	const WeakSetShim = __webpack_require__(42)
+
+	module.exports = new Map([
+	  [Map, MapShim],
+	  [Set, SetShim],
+	  [WeakMap, WeakMapShim],
+	  [WeakSet, WeakSetShim],
+	  [Date, true],
+	  [RegExp, true]
+	])
+
+
+/***/ },
+/* 39 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const native = Map.prototype
+	const masterKey = Symbol('Map master key')
+
+	const getters = ['has', 'get']
+	const iterators = ['forEach', 'keys', 'values', 'entries', Symbol.iterator]
+	const all = ['set', 'delete', 'clear'].concat(getters, iterators)
+
+	module.exports = function shim (target, registerObserver, queueObservers) {
+	  target.$raw = {}
+
+	  for (let method of all) {
+	    target.$raw[method] = function () {
+	      native[method].apply(target, arguments)
+	    }
+	  }
+
+	  for (let getter of getters) {
+	    target[getter] = function (key) {
+	      registerObserver(this, key)
+	      return native[getter].apply(this, arguments)
+	    }
+	  }
+
+	  for (let iterator of iterators) {
+	    target[iterator] = function () {
+	      registerObserver(this, masterKey)
+	      return native[iterator].apply(this, arguments)
+	    }
+	  }
+
+	  target.set = function (key, value) {
+	    if (this.get(key) !== value) {
+	      queueObservers(this, key)
+	      queueObservers(this, masterKey)
+	    }
+	    return native.set.apply(this, arguments)
+	  }
+
+	  target.delete = function (key) {
+	    if (this.has(key)) {
+	      queueObservers(this, key)
+	      queueObservers(this, masterKey)
+	    }
+	    return native.delete.apply(this, arguments)
+	  }
+
+	  target.clear = function () {
+	    if (this.size) {
+	      queueObservers(this, masterKey)
+	    }
+	    return native.clear.apply(this, arguments)
+	  }
+
+	  return target
+	}
+
+
+/***/ },
+/* 40 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const native = Set.prototype
+	const masterValue = Symbol('Set master value')
+
+	const getters = ['has']
+	const iterators = ['forEach', 'keys', 'values', 'entries', Symbol.iterator]
+	const all = ['add', 'delete', 'clear'].concat(getters, iterators)
+
+	module.exports = function shim (target, registerObserver, queueObservers) {
+	  target.$raw = {}
+
+	  for (let method of all) {
+	    target.$raw[method] = function () {
+	      native[method].apply(target, arguments)
+	    }
+	  }
+
+	  for (let getter of getters) {
+	    target[getter] = function (value) {
+	      registerObserver(this, value)
+	      return native[getter].apply(this, arguments)
+	    }
+	  }
+
+	  for (let iterator of iterators) {
+	    target[iterator] = function () {
+	      registerObserver(this, masterValue)
+	      return native[iterator].apply(this, arguments)
+	    }
+	  }
+
+	  target.add = function (value) {
+	    if (!this.has(value)) {
+	      queueObservers(this, value)
+	      queueObservers(this, masterValue)
+	    }
+	    return native.add.apply(this, arguments)
+	  }
+
+	  target.delete = function (value) {
+	    if (this.has(value)) {
+	      queueObservers(this, value)
+	      queueObservers(this, masterValue)
+	    }
+	    return native.delete.apply(this, arguments)
+	  }
+
+	  target.clear = function () {
+	    if (this.size) {
+	      queueObservers(this, masterValue)
+	    }
+	    return native.clear.apply(this, arguments)
+	  }
+
+	  return target
+	}
+
+
+/***/ },
+/* 41 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const native = WeakMap.prototype
+
+	const getters = ['has', 'get']
+	const all = ['set', 'delete'].concat(getters)
+
+	module.exports = function shim (target, registerObserver, queueObservers) {
+	  target.$raw = {}
+
+	  for (let method of all) {
+	    target.$raw[method] = function () {
+	      native[method].apply(target, arguments)
+	    }
+	  }
+
+	  for (let getter of getters) {
+	    target[getter] = function (key) {
+	      registerObserver(this, key)
+	      return native[getter].apply(this, arguments)
+	    }
+	  }
+
+	  target.set = function (key, value) {
+	    if (this.get(key) !== value) {
+	      queueObservers(this, key)
+	    }
+	    return native.set.apply(this, arguments)
+	  }
+
+	  target.delete = function (key) {
+	    if (this.has(key)) {
+	      queueObservers(this, key)
+	    }
+	    return native.delete.apply(this, arguments)
+	  }
+
+	  return target
+	}
+
+
+/***/ },
+/* 42 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const native = WeakSet.prototype
+
+	const getters = ['has']
+	const all = ['add', 'delete'].concat(getters)
+
+	module.exports = function shim (target, registerObserver, queueObservers) {
+	  target.$raw = {}
+
+	  for (let method of all) {
+	    target.$raw[method] = function () {
+	      native[method].apply(target, arguments)
+	    }
+	  }
+
+	  for (let getter of getters) {
+	    target[getter] = function (value) {
+	      registerObserver(this, value)
+	      return native[getter].apply(this, arguments)
+	    }
+	  }
+
+	  target.add = function (value) {
+	    if (!this.has(value)) {
+	      queueObservers(this, value)
+	    }
+	    return native.add.apply(this, arguments)
+	  }
+
+	  target.delete = function (value) {
+	    if (this.has(value)) {
+	      queueObservers(this, value)
+	    }
+	    return native.delete.apply(this, arguments)
+	  }
+
+	  return target
+	}
+
+
+/***/ },
+/* 43 */
+/***/ function(module, exports) {
+
+	'use strict'
+
+	const wellKnowSymbols = new Set()
+
+	for (let key of Object.getOwnPropertyNames(Symbol)) {
+	  const value = Symbol[key]
+	  if (typeof value === 'symbol') {
+	    wellKnowSymbols.add(value)
+	  }
+	}
+
+	module.exports = wellKnowSymbols
+
+
+/***/ },
+/* 44 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  app: __webpack_require__(33),
-	  router: __webpack_require__(34)
+	  app: __webpack_require__(45),
+	  page: __webpack_require__(46),
+	  rendered: __webpack_require__(47),
+	  router: __webpack_require__(48)
 	}
 
 
 /***/ },
-/* 33 */
+/* 45 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const component = __webpack_require__(4)
-	const middlewares = __webpack_require__(12)
+	const component = __webpack_require__(3)
+	const middlewares = __webpack_require__(14)
 
 	module.exports = function app (config) {
 	  config = Object.assign({root: true, isolate: 'middlewares'}, config)
 
 	  return component(config)
 	    .useOnContent(middlewares.observe)
-	    .useOnContent(middlewares.code)
-	    .useOnContent(middlewares.expression)
 	    .useOnContent(middlewares.interpolate)
 	    .useOnContent(middlewares.attributes)
 	    .useOnContent(middlewares.style)
 	    .useOnContent(middlewares.animate)
 	    .useOnContent(middlewares.ref)
-	    .useOnContent(middlewares.content)
 	    .useOnContent(middlewares.flow)
 	    .useOnContent(middlewares.bindable)
 	    .useOnContent(middlewares.bind)
@@ -2728,41 +3115,105 @@
 
 
 /***/ },
-/* 34 */
+/* 46 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const component = __webpack_require__(4)
-	const middlewares = __webpack_require__(12)
+	const component = __webpack_require__(3)
+	const middlewares = __webpack_require__(14)
 
-	module.exports = function routerComp (config) {
+	module.exports = function page (config) {
+	  config = config || {}
+
 	  return component(config)
-	    .use(middlewares.router)
+	    .use(middlewares.render(config))
+	    .use(middlewares.params(config.params))
 	}
 
 
 /***/ },
-/* 35 */
+/* 47 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const component = __webpack_require__(3)
+	const middlewares = __webpack_require__(14)
+
+	module.exports = function rendered (config) {
+	  config = config || {}
+
+	  return component(config)
+	    .use(middlewares.render(config))
+	}
+
+
+/***/ },
+/* 48 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const component = __webpack_require__(3)
+	const middlewares = __webpack_require__(14)
+
+	module.exports = function router (config) {
+	  config = Object.assign({state: false}, config)
+
+	  return component(config)
+	    .use(middlewares.route)
+	}
+
+
+/***/ },
+/* 49 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  capitalize: __webpack_require__(36),
-	  uppercase: __webpack_require__(37),
-	  lowercase: __webpack_require__(38),
-	  unit: __webpack_require__(39),
-	  json: __webpack_require__(40),
-	  slice: __webpack_require__(41),
-	  date: __webpack_require__(42),
-	  time: __webpack_require__(43),
-	  datetime: __webpack_require__(44)
+	  compiler: __webpack_require__(16),
+	  observer: __webpack_require__(35),
+	  dom: __webpack_require__(26)
 	}
 
 
 /***/ },
-/* 36 */
+/* 50 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const compiler = __webpack_require__(16)
+	const filters = __webpack_require__(51)
+
+	for (let name in filters) {
+	  compiler.filter(name, filters[name])
+	}
+
+
+/***/ },
+/* 51 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	module.exports = {
+	  capitalize: __webpack_require__(52),
+	  uppercase: __webpack_require__(53),
+	  lowercase: __webpack_require__(54),
+	  unit: __webpack_require__(55),
+	  json: __webpack_require__(56),
+	  slice: __webpack_require__(57),
+	  date: __webpack_require__(58),
+	  time: __webpack_require__(59),
+	  datetime: __webpack_require__(60)
+	}
+
+
+/***/ },
+/* 52 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2777,7 +3228,7 @@
 
 
 /***/ },
-/* 37 */
+/* 53 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2791,7 +3242,7 @@
 
 
 /***/ },
-/* 38 */
+/* 54 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2805,7 +3256,7 @@
 
 
 /***/ },
-/* 39 */
+/* 55 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2823,7 +3274,7 @@
 
 
 /***/ },
-/* 40 */
+/* 56 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2837,7 +3288,7 @@
 
 
 /***/ },
-/* 41 */
+/* 57 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2851,7 +3302,7 @@
 
 
 /***/ },
-/* 42 */
+/* 58 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2865,7 +3316,7 @@
 
 
 /***/ },
-/* 43 */
+/* 59 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2879,7 +3330,7 @@
 
 
 /***/ },
-/* 44 */
+/* 60 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2893,22 +3344,36 @@
 
 
 /***/ },
-/* 45 */
+/* 61 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict'
+
+	const compiler = __webpack_require__(16)
+	const limiters = __webpack_require__(62)
+
+	for (let name in limiters) {
+	  compiler.limiter(name, limiters[name])
+	}
+
+
+/***/ },
+/* 62 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	module.exports = {
-	  if: __webpack_require__(46),
-	  delay: __webpack_require__(47),
-	  debounce: __webpack_require__(48),
-	  throttle: __webpack_require__(49),
-	  key: __webpack_require__(50)
+	  if: __webpack_require__(63),
+	  delay: __webpack_require__(64),
+	  debounce: __webpack_require__(65),
+	  throttle: __webpack_require__(66),
+	  key: __webpack_require__(67)
 	}
 
 
 /***/ },
-/* 46 */
+/* 63 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2921,7 +3386,7 @@
 
 
 /***/ },
-/* 47 */
+/* 64 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2935,7 +3400,7 @@
 
 
 /***/ },
-/* 48 */
+/* 65 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -2952,12 +3417,11 @@
 
 
 /***/ },
-/* 49 */
+/* 66 */
 /***/ function(module, exports) {
 
 	'use strict'
 
-	const timer = Symbol('throttle timer')
 	const lastExecution = Symbol('throttle last execution')
 
 	module.exports = function throttle (next, context, threshold) {
@@ -2975,12 +3439,12 @@
 
 
 /***/ },
-/* 50 */
+/* 67 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	const stringToCode = __webpack_require__(51)
+	const stringToCode = __webpack_require__(68)
 
 	module.exports = function keyLimiter (next, context, ...keys) {
 	  if (!(context.$event instanceof KeyboardEvent)) {
@@ -2996,7 +3460,7 @@
 
 
 /***/ },
-/* 51 */
+/* 68 */
 /***/ function(module, exports) {
 
 	// Source: http://jsfiddle.net/vWx8V/
@@ -3148,14 +3612,14 @@
 
 
 /***/ },
-/* 52 */
+/* 69 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
 	// use Firebase and EventListener for simple real-time updates
-	const Firebase = __webpack_require__(53)
-	const EventListener = __webpack_require__(54)
+	const Firebase = __webpack_require__(70)
+	const EventListener = __webpack_require__(71)
 
 	const api = new Firebase('https://hacker-news.firebaseio.com/v0')
 	const store = new EventListener()
@@ -3231,7 +3695,7 @@
 
 
 /***/ },
-/* 53 */
+/* 70 */
 /***/ function(module, exports) {
 
 	/*! @license Firebase v2.4.2
@@ -3517,7 +3981,7 @@
 
 
 /***/ },
-/* 54 */
+/* 71 */
 /***/ function(module, exports) {
 
 	// Copyright Joyent, Inc. and other Node contributors.
@@ -3825,24 +4289,24 @@
 
 
 /***/ },
-/* 55 */
+/* 72 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
 
-	__webpack_require__(56)
-	__webpack_require__(59)
-	__webpack_require__(60)
-	__webpack_require__(63)
-	__webpack_require__(66)
-	__webpack_require__(69)
-	__webpack_require__(72)
-	__webpack_require__(75)
-	__webpack_require__(78)
+	__webpack_require__(73)
+	__webpack_require__(76)
+	__webpack_require__(77)
+	__webpack_require__(80)
+	__webpack_require__(83)
+	__webpack_require__(86)
+	__webpack_require__(89)
+	__webpack_require__(92)
+	__webpack_require__(95)
 
 
 /***/ },
-/* 56 */
+/* 73 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3855,8 +4319,8 @@
 	// register the component as 'hacker-news', from now on it can be used as <hacker-news></hacker-news>
 	nx.components.app()
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(57),
-	    style: __webpack_require__(58)
+	    template: __webpack_require__(74),
+	    style: __webpack_require__(75)
 	  }))
 	  .register('hacker-news')
 
@@ -3884,19 +4348,19 @@
 
 
 /***/ },
-/* 57 */
+/* 74 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- adds routing logic with the router comp and route attributes -->\n<!-- the child which has a route attribute matching with the URL path is displayed -->\n<!-- adds leave animations to the router views -->\n<nav is=\"app-nav\"></nav>\n<app-router>\n  <story-list route=\"stories\" default-route leave-animation=\"fadeOut .6s\"></story-list>\n  <user-page route=\"user\" leave-animation=\"fadeOut .6s\"></user-page>\n  <story-page route=\"story\" leave-animation=\"fadeOut .6s\"></story-page>\n</app-router>\n"
 
 /***/ },
-/* 58 */
+/* 75 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  display: block;\n  width: 85%;\n  margin: auto;\n  color: black;\n  background-color: rgb(246, 246, 239);\n  font: 10pt Verdana, Geneva, sans-serif;\n}\n\na {\n  color: inherit;\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.light {\n  color: #828282;\n}\n\n.light a:hover {\n  text-decoration: underline;\n}\n\n.subtext {\n  font-size: 7pt;\n}\n\n@media all and (max-width: 750px) {\n  :host {\n    width: 100%\n  }\n}\n"
 
 /***/ },
-/* 59 */
+/* 76 */
 /***/ function(module, exports) {
 
 	'use strict'
@@ -3908,7 +4372,7 @@
 
 
 /***/ },
-/* 60 */
+/* 77 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3922,26 +4386,26 @@
 	    type: {type: 'string', default: 'top'}
 	  }))
 	  .use(nx.middlewares.render({
-	    template: __webpack_require__(61),
-	    style: __webpack_require__(62)
+	    template: __webpack_require__(78),
+	    style: __webpack_require__(79)
 	  }))
 	  .register('app-nav')
 
 
 /***/ },
-/* 61 */
+/* 78 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- adds client side routing navigation with the iref and iref-params attributes -->\n<a iref=\"stories\" $iref-params=\"{type: 'top'}\"><b>Hacker News</b></a>\n<a iref=\"stories\" $iref-params=\"{type: 'new'}\" @class=\"{active: type === 'new'}\">new</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'show'}\" @class=\"{active: type === 'show'}\">show</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'ask'}\" @class=\"{active: type === 'ask'}\">ask</a>\n| <a iref=\"stories\" $iref-params=\"{type: 'job'}\" @class=\"{active: type === 'job'}\">jobs</a>\n<span>Built with\n  <a href=\"http://nx-framework.com\" target=\"_blank\">NX</a> |\n  <a href=\"https://github.com/nx-hacker-news/nx-hacker-news.github.io\">Source</a>\n</span>\n"
 
 /***/ },
-/* 62 */
+/* 79 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  background-color: rgb(255, 102, 0);\n  padding: 4px;\n  overflow: hidden;\n}\n\na.active {\n  color: white;\n}\n\nb {\n  padding: 0 4px;\n}\n\nspan {\n  color: white;\n  display: inline-block;\n  float: right;\n  font-size: 9pt;\n}\n\nspan a:hover {\n  text-decoration: underline;\n}\n"
 
 /***/ },
-/* 63 */
+/* 80 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3951,17 +4415,14 @@
 	// add a render middleware, that renders the content from view.html and style.less into the component
 	// add a custom middleware
 	// register the component as 'story-list', from now on it can be used as <story-listy></story-list>
-	nx.component()
-	  .use(nx.middlewares.params({
+	nx.components.page({
+	  template: __webpack_require__(81),
+	  style: __webpack_require__(82),
+	  params: {
 	    type: {type: 'string', readOnly: true, default: 'top'},
 	    page: {type: 'number', history: true, default: 0}
-	  }))
-	  .use(nx.middlewares.render({
-	    template: __webpack_require__(64),
-	    style: __webpack_require__(65)
-	  }))
-	  .use(setup)
-	  .register('story-list')
+	  }
+	}).use(setup).register('story-list')
 
 	// this is a custom middleware
 	// it loads stories when the store broadcasts an update event or when the 'type' or 'page' parameters change
@@ -3978,19 +4439,19 @@
 
 
 /***/ },
-/* 64 */
+/* 81 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @repeat=\"stories\" repeat-value=\"story\" track-by=\"id\">\n  <story-item $story=\"story\"\n    enter-animation=\"fadeIn .6s .3s\"\n    move-animation=\".6s .3s\"\n    leave-animation=\"fadeOut .6s\">\n  </story-item>\n</div>\n<a #click=\"page++\" class=\"paginator\">More</a>\n"
 
 /***/ },
-/* 65 */
+/* 82 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  display: block;\n  position: relative;\n  padding: 10px;\n  padding-bottom: 30px;\n  min-height: 1000px;\n}\n\nstory-item {\n  margin-bottom: 8px;\n}\n\n.paginator {\n  position: absolute;\n  padding: 10px 0;\n  bottom: 0;\n}\n"
 
 /***/ },
-/* 66 */
+/* 83 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -3999,13 +4460,10 @@
 	// add a render middleware, that renders the content from view.html and style.less into the component
 	// add a custom middleware
 	// register the component as 'story-item', from now on it can be used as <story-item></story-item>
-	nx.component()
-	  .use(nx.middlewares.render({
-	    template: __webpack_require__(67),
-	    style: __webpack_require__(68)
-	  }))
-	  .use(setup)
-	  .register('story-item')
+	nx.components.rendered({
+	  template: __webpack_require__(84),
+	  style: __webpack_require__(85)
+	}).use(setup).register('story-item')
 
 	// this is a custom middleware, that registers the story attribute on the component
 	// the attribute injects a story into the component state
@@ -4015,19 +4473,19 @@
 
 
 /***/ },
-/* 67 */
+/* 84 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div $if=\"story && !story.deleted && !story.dead && story.title\">\n  <div $if=\"story.url\">\n    <a $href=\"story.url\">${story.title}</a>\n    <small class=\"light\">(<a $href=\"story.url\">${story.url | host}</a>)</small>\n  </div>\n  <div $if=\"!story.url\">\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.title}</a>\n  </div>\n\n  <div $if=\"story.type === 'job'\" class=\"subtext light\">\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a>\n  </div>\n  <div $if=\"story.type !== 'job'\" class=\"subtext light\">\n    ${story.score | unit 'point'} by\n    <a iref=\"../user\" $iref-params=\"{id: story.by}\">${story.by}</a>\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.time | timeAgo} ago</a> |\n    <a iref=\"../story\" $iref-params=\"{id: story.id}\">${story.descendants | unit 'comment'}</a>\n  </div>\n</div>\n"
 
 /***/ },
-/* 68 */
+/* 85 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  display: block;\n  min-height: 27px;\n}\n"
 
 /***/ },
-/* 69 */
+/* 86 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -4037,16 +4495,13 @@
 	// add a render middleware, that renders the content from view.html and style.less into the component
 	// add a custom middleware
 	// register the component as 'story-page', from now on it can be used as <story-page></story-page>
-	nx.component()
-	  .use(nx.middlewares.params({
+	nx.components.page({
+	  template: __webpack_require__(87),
+	  style: __webpack_require__(88),
+	  params: {
 	    id: {type: 'number', readOnly: true, required: true}
-	  }))
-	  .use(nx.middlewares.render({
-	    template: __webpack_require__(70),
-	    style: __webpack_require__(71)
-	  }))
-	  .use(setup)
-	  .register('story-page')
+	  }
+	}).use(setup).register('story-page')
 
 	// this is a custom middleware, that fetches a story by its id
 	function setup (elem, state) {
@@ -4056,19 +4511,19 @@
 
 
 /***/ },
-/* 70 */
+/* 87 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"story\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <story-item $story></story-item>\n    <dynamic-html $content=\"story.text\" class=\"body\"></dynamic-html>\n    <lu $repeat=\"story.kids\" repeat-value=\"commentId\">\n      <li is=\"comment-item\" $comment-id=\"commentId\"></li>\n    </lu>\n  </div>\n</div>\n"
 
 /***/ },
-/* 71 */
+/* 88 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  display: block;\n  padding: 10px;\n}\n\n.body {\n  display: block;\n  margin: 20px 0;\n}\n"
 
 /***/ },
-/* 72 */
+/* 89 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -4078,16 +4533,13 @@
 	// add a render middleware, that renders the content from view.html and style.less into the component
 	// add a custom middleware
 	// register the component as 'user-page', from now on it can be used as <user-page></user-page>
-	nx.component()
-	  .use(nx.middlewares.params({
+	nx.components.page({
+	  template: __webpack_require__(90),
+	  style: __webpack_require__(91),
+	  params: {
 	    id: {type: 'string', readOnly: true, required: true}
-	  }))
-	  .use(nx.middlewares.render({
-	    template: __webpack_require__(73),
-	    style: __webpack_require__(74)
-	  }))
-	  .use(setup)
-	  .register('user-page')
+	  }
+	}).use(setup).register('user-page')
 
 	// this is a custom middleware, that fetches a user by its id
 	function setup (elem, state) {
@@ -4097,19 +4549,19 @@
 
 
 /***/ },
-/* 73 */
+/* 90 */
 /***/ function(module, exports) {
 
 	module.exports = "<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<div @if=\"user\">\n  <div enter-animation=\"fadeIn .6s .3s\">\n    <p>user: ${user.id}</p>\n    <p>created: ${user.created}</p>\n    <p>karma: ${user.karma}</p>\n    <p>about: <dynamic-html $content=\"user.about\"></dynamic-html></p>\n  </div>\n</div>\n"
 
 /***/ },
-/* 74 */
+/* 91 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  display: block;\n  padding: 10px;\n}\n"
 
 /***/ },
-/* 75 */
+/* 92 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict'
@@ -4118,13 +4570,11 @@
 	// add a render middleware, that renders the content from view.html and style.less into the component
 	// add a custom middleware
 	// register the component as 'comment-item', from now on it can be used as <comment-item></comment-item>
-	nx.component({element: 'li'})
-	  .use(nx.middlewares.render({
-	    template: __webpack_require__(76),
-	    style: __webpack_require__(77)
-	  }))
-	  .use(setup)
-	  .register('comment-item')
+	nx.components.rendered({
+	  element: 'li',
+	  template: __webpack_require__(93),
+	  style: __webpack_require__(94)
+	}).use(setup).register('comment-item')
 
 	  // this is a custom middleware
 	  // it registers a comment-id attribute for the component, that fetches a comment by id
@@ -4137,19 +4587,19 @@
 
 
 /***/ },
-/* 76 */
+/* 93 */
 /***/ function(module, exports) {
 
 	module.exports = "\n<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->\n<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->\n<!-- '#' prefix means event handling code -->\n<div @if=\"comment && !comment.deleted && !comment.dead && comment.text\">\n  <div enter-animation=\"fadeIn .6s\">\n    <div class=\"header light\">\n      <a iref=\"../user\" $iref-params=\"{id: comment.by}\">${comment.by}</a>\n      <a iref=\"../story\" $iref-params=\"{id: comment.id}\">${comment.time | timeAgo} ago</a>\n      <a #click=\"hidden = !hidden\">@{hidden ? '[+]' : '[-]'}</a>\n    </div>\n    <div @hidden>\n      <dynamic-html $content=\"comment.text\" class=\"body\"></dynamic-html>\n      <ul $repeat=\"comment.kids\" repeat-value=\"childCommentId\">\n        <li is=\"comment-item\" $comment-id=\"childCommentId\"></li>\n      </ul>\n    </div>\n  </div>\n</div>\n"
 
 /***/ },
-/* 77 */
+/* 94 */
 /***/ function(module, exports) {
 
 	module.exports = ":host {\n  margin: 20px 0;\n  font-size: 9pt;\n  list-style-type: none;\n}\n\n.header {\n  margin-bottom: 5px;\n}\n\n.body a {\n  text-decoration: underline;\n}\n"
 
 /***/ },
-/* 78 */
+/* 95 */
 /***/ function(module, exports) {
 
 	'use strict'

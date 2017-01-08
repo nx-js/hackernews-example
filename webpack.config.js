@@ -1,6 +1,5 @@
 'use strict'
 
-// bundle things together into /bundle.js with raw HTML and less loaders
 module.exports = {
   entry: './src/index.js',
   output: {
@@ -9,8 +8,7 @@ module.exports = {
   },
   module: {
     loaders: [
-      {test: /\.html$/, loader: 'raw'},
-      {test: /\.css$/, loader: 'raw'}
+      {test: /\.(html)|(css)$/, loader: 'raw'}
     ]
   }
 }

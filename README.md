@@ -14,7 +14,7 @@ makes the NX data binding and reactivity system really simple with no surprise e
 
 ## Project structure
 
-You can find a readme in every directory of this project, that explains the code inside it.
+You can find a readMe in every directory of this project, that explains the code inside it.
 The project is structured in the following way.
   - The [src](/src) folder includes the API and the NX components of the app.
   - The source is bundled with [Webpack](https://webpack.github.io/). You can find the simple
@@ -26,7 +26,3 @@ The project is structured in the following way.
     The bundled source is imported as an async script for faster loading.
   - [server.js](/server.js) is not used, as the page is hosted on Github Pages.
     It is used for local testing and serves as a simple server example for other applications.
-  - [404.html](/404.html) is a hackish script to make Single Page Apps work with
-    Github Pages hosting. For more information see [this repo](https://github.com/rafrex/spa-github-pages).
-  - [checkNX.js](/checkNX.js) is a simple check, that detects if NX is supported in the current
-    browser and provides an explanation if it is not.

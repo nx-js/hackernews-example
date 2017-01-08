@@ -8,35 +8,14 @@
     <meta name="author" content="Miklos Bertalan">
     <title>Hacker News implemented in NX</title>
 
-    <!-- This is a hack script to make Single Page Apps (like this) work with Github Pages hosting.
-    For more information see this repository: https://github.com/rafrex/spa-github-pages -->
-    <script type="text/javascript">
-      (function(l) {
-        if (l.search) {
-          var q = {};
-          l.search.slice(1).split('&').forEach(function(v) {
-            var a = v.split('=');
-            q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');
-          });
-          if (q.p !== undefined) {
-            window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + (q.p || '') +
-              (q.q ? ('?' + q.q) : '') +
-              l.hash
-            );
-          }
-        }
-      }(window.location))
-    </script>
-
     <!-- the animate.css animation/keyframe collection is used to simplify animations in the app -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.5.2/animate.min.css">
     <!-- this is the bundled script (our code and nx bundled together) -->
-    <script src="bundle.js"></script>
-    <!-- this displays an explanation for the yet unsupported browsers (Safari below 10 and IE) -->
-    <script src="checkNX.js"></script>
+    <script src="/bundle.js" async></script>
+    <!-- this style is used to hide content until NX is fully loaded -->
+    <style>:unresolved { display: none; }</style>
   <body>
-    <!-- this is our root NX component, registered in /components/hackerNews -->
+    <!-- this is our root component, it is registered in /components/hackerNews -->
     <hacker-news></hacker-news>
   </body>
 </html>

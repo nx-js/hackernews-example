@@ -5,17 +5,14 @@
 // add a render middleware, that renders the content from view.html and style.less into the component
 // add a custom middleware
 // register the component as 'story-list', from now on it can be used as <story-listy></story-list>
-nx.component()
-  .use(nx.middlewares.params({
+nx.components.page({
+  template: require('./view.html'),
+  style: require('./style.css'),
+  params: {
     type: {type: 'string', readOnly: true, default: 'top'},
     page: {type: 'number', history: true, default: 0}
-  }))
-  .use(nx.middlewares.render({
-    template: require('./view.html'),
-    style: require('./style.css')
-  }))
-  .use(setup)
-  .register('story-list')
+  }
+}).use(setup).register('story-list')
 
 // this is a custom middleware
 // it loads stories when the store broadcasts an update event or when the 'type' or 'page' parameters change

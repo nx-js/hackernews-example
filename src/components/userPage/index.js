@@ -5,16 +5,13 @@
 // add a render middleware, that renders the content from view.html and style.less into the component
 // add a custom middleware
 // register the component as 'user-page', from now on it can be used as <user-page></user-page>
-nx.component()
-  .use(nx.middlewares.params({
+nx.components.page({
+  template: require('./view.html'),
+  style: require('./style.css'),
+  params: {
     id: {type: 'string', readOnly: true, required: true}
-  }))
-  .use(nx.middlewares.render({
-    template: require('./view.html'),
-    style: require('./style.css')
-  }))
-  .use(setup)
-  .register('user-page')
+  }
+}).use(setup).register('user-page')
 
 // this is a custom middleware, that fetches a user by its id
 function setup (elem, state) {
