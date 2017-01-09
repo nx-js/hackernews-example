@@ -1,8 +1,5 @@
 'use strict'
 
-// create a Web Component
-// add a custom middleware
-// register the component as 'dynamic-html', from now on it can be used as <dynamic-html></dynamic-html>
 nx.component()
   .use(setup)
   .register('dynamic-html')

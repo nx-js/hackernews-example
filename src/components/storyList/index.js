@@ -1,10 +1,5 @@
 'use strict'
 
-// create a Web Component
-// add a params middleware, that keeps the 'type' and 'page' parameters in sync with the URL and history
-// add a render middleware, that renders the content from view.html and style.less into the component
-// add a custom middleware
-// register the component as 'story-list', from now on it can be used as <story-listy></story-list>
 nx.components.page({
   template: require('./view.html'),
   style: require('./style.css'),

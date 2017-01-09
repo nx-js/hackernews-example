@@ -1,9 +1,5 @@
 'use strict'
 
-// create a Web Component
-// add a render middleware, that renders the content from view.html and style.less into the component
-// add a custom middleware
-// register the component as 'story-item', from now on it can be used as <story-item></story-item>
 nx.components.rendered({
   template: require('./view.html'),
   style: require('./style.css')

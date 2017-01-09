@@ -4325,8 +4325,8 @@
 	  .register('hacker-news')
 
 	// register two custom filters, that can be used inside expressions
-	nx.middlewares.expression.filter('host', hostFilter)
-	nx.middlewares.expression.filter('timeAgo', timeAgoFilter)
+	nx.utils.compiler.filter('host', hostFilter)
+	nx.utils.compiler.filter('timeAgo', timeAgoFilter)
 
 	// this is a custom filter, that can be used in the view as 'value | host'
 	function hostFilter (url) {
@@ -4338,12 +4338,12 @@
 	function timeAgoFilter (timestamp) {
 	  const diffInSeconds = Math.round(Date.now() / 1000) - timestamp
 	  if (diffInSeconds < 3600) {
-	    return nx.filters.unit(Math.round(diffInSeconds / 60), 'minute')
+	    return Math.round(diffInSeconds / 60) + 'minutes'
 	  }
 	  if (diffInSeconds < 86400) {
-	    return nx.filters.unit(Math.round(diffInSeconds / 3600), 'hour')
+	    return Math.round(diffInSeconds / 3600) + 'hours'
 	  }
-	  return nx.filters.unit(Math.round(diffInSeconds / 86400), 'day')
+	  return Math.round(diffInSeconds / 86400) + 'days'
 	}
 
 

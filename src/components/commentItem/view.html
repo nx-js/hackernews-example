@@ -1,7 +1,3 @@
-
-<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->
-<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
-<!-- '#' prefix means event handling code -->
 <div @if="comment && !comment.deleted && !comment.dead && comment.text">
   <div enter-animation="fadeIn .6s">
     <div class="header light">

@@ -1,9 +1,5 @@
 'use strict'
 
-// create a Web Component, extending the native 'li' element
-// add a render middleware, that renders the content from view.html and style.less into the component
-// add a custom middleware
-// register the component as 'comment-item', from now on it can be used as <comment-item></comment-item>
 nx.components.rendered({
   element: 'li',
   template: require('./view.html'),

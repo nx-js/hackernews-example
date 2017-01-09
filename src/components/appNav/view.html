@@ -1,5 +1,3 @@
-<!-- inline code is executed in the context of the component state (which is injected into middlewares) -->
-<!-- '$' prefix means one time interpolation, '@' prefix means dynamic interpolation -->
 <!-- adds client side routing navigation with the iref and iref-params attributes -->
 <a iref="stories" $iref-params="{type: 'top'}"><b>Hacker News</b></a>
 <a iref="stories" $iref-params="{type: 'new'}" @class="{active: type === 'new'}">new</a>

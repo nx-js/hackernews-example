@@ -1,6 +1,6 @@
 {
-  "name": "hacker-news",
-  "version": "1.1.0",
+  "name": "hackernews-example",
+  "version": "1.0.0",
   "description": "NX implementation of Hacker News",
   "main": "index.js",
   "scripts": {
