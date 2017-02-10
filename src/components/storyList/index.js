@@ -3,9 +3,10 @@
 nx.components.page({
   template: require('./view.html'),
   style: require('./style.css'),
+  title: 'Stories | Hacker News',
   params: {
-    type: {type: 'string', readOnly: true, default: 'top'},
-    page: {type: 'number', history: true, default: 0}
+    type: {url: true, history: true, default: 'top'},
+    page: {url: true, history: false, type: 'number', default: 0}
   }
 }).use(setup).register('story-list')
 
@@ -18,6 +19,8 @@ function setup (elem, state) {
 
   function loadStories () {
     store.fetchItemsByType(state.type, state.page)
-      .then(items => state.stories = items)
+      .then(items => {
+        state.stories = items.filter(item => item && !item.deleted && !item.dead)
+      })
   }
 }

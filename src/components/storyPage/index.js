@@ -3,8 +3,9 @@
 nx.components.page({
   template: require('./view.html'),
   style: require('./style.css'),
+  title: 'Story page | Hacker News',
   params: {
-    id: {type: 'number', readOnly: true, required: true}
+    id: {url: true, readOnly: true, required: true}
   }
 }).use(setup).register('story-page')
 

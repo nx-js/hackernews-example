@@ -8,9 +8,9 @@ nx.components.rendered({
 
   // this is a custom middleware
   // it registers a comment-id attribute for the component, that fetches a comment by id
-  function setup (elem, state) {
-    elem.$attribute('comment-id', id => {
-      store.fetchItem(id)
-        .then(comment => state.comment = comment)
-    })
-  }
+function setup (elem, state) {
+  elem.$attribute('comment-id', id => {
+    store.fetchItem(id)
+      .then(comment => state.comment = comment)
+  })
+}

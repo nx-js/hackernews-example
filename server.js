@@ -13,4 +13,4 @@ app.use(express.static(__dirname))
 // finally serve the index.html file, the routing will take place on the client side
 app.use((req, res) => res.sendFile(__dirname + '/index.html'))
 
-app.listen(3000)
+app.listen(3002)

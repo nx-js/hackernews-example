@@ -8,14 +8,14 @@
     "prestart": "npm run build",
     "start": "node server.js"
   },
-  "author": "",
+  "author": "Miklos Bertalan",
   "license": "MIT",
   "dependencies": {
     "compression": "^1.6.2",
     "express": "^4.14.0"
   },
   "devDependencies": {
-    "@nx-js/framework": "^1.0.0-beta.1.0.0",
+    "@nx-js/framework": "^1.0.0-beta.2.0.0",
     "events": "^1.1.1",
     "firebase": "^2.4.2",
     "webpack": "^1.13.1",

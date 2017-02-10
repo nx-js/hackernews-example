@@ -3,12 +3,10 @@
 const urlParser = document.createElement('a')
 
 // this is the root component
-nx.components.app()
-  .use(nx.middlewares.render({
-    template: require('./view.html'),
-    style: require('./style.css')
-  }))
-  .register('hacker-news')
+nx.components.app({
+  template: require('./view.html'),
+  style: require('./style.css')
+}).register('hacker-news')
 
 // register two custom filters, that can be used inside expressions
 nx.utils.compiler.filter('host', hostFilter)
